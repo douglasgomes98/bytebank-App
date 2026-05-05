@@ -89,60 +89,129 @@ path_provider: ^2.1.5           # Acesso a diretórios do sistema
 shared_preferences: ^2.3.5      # Armazenamento local de preferências
 ```
 
+#### Tipos Funcionais
+```yaml
+fpdart: ^1.1.0                  # Either/Failure no contrato do domínio
+```
+
 ---
 
 ## 📁 Estrutura do Projeto
 
+O projeto adota **Clean Architecture** com organização **feature-first**: cada
+feature é um diretório autocontido subdividido em `domain/`, `data/` e
+`presentation/`. O diretório `core/` agrega exclusivamente código transversal
+sem regra de negócio.
+
 ```
 lib/
-├── main.dart                      # Ponto de entrada da aplicação
-├── app.dart                       # Configuração do MaterialApp
-├── firebase_options.dart          # Configurações do Firebase
+├── main.dart                                  # Ponto de entrada da aplicação
+├── app.dart                                   # Composition root + MaterialApp
+├── firebase_options.dart                      # Configurações do Firebase
 │
-├── models/                        # Modelos de dados
-│   ├── user.dart                  # Modelo de usuário
-│   ├── transaction.dart           # Modelo de transação
-│   └── category.dart              # Categorias de transações
-│
-├── providers/                     # Gerenciamento de estado
-│   ├── auth_provider.dart         # Estado de autenticação
-│   ├── transaction_provider.dart  # Estado de transações
-│   └── theme_provider.dart        # Estado do tema (claro/escuro)
-│
-├── screens/                       # Telas da aplicação
-│   ├── auth/
-│   │   ├── login_screen.dart      # Tela de login
-│   │   └── register_screen.dart   # Tela de cadastro
-│   ├── dashboard/
-│   │   └── dashboard_screen.dart  # Dashboard principal
-│   ├── transactions/
-│   │   ├── transaction_list_screen.dart
-│   │   ├── transaction_form_screen.dart
-│   │   └── transaction_detail_screen.dart
-│   └── profile/
-│       └── profile_screen.dart    # Perfil do usuário
-│
-├── services/                      # Serviços e integrações
-│   └── firebase/
-│       ├── auth_service.dart      # Autenticação Firebase
-│       ├── firestore_service.dart # Firestore Database
-│       └── storage_service.dart   # Firebase Storage
-│
-├── widgets/                       # Componentes reutilizáveis
-│   ├── common/
+├── core/                                      # Código transversal sem regra de negócio
+│   ├── di/
+│   │   └── dependencies.dart                  # Composition root das features
+│   ├── error/
+│   │   ├── failure.dart                       # Hierarquia selada de Failure
+│   │   └── exceptions.dart                    # Exceções da camada de dados
+│   ├── network/
+│   │   └── network_info.dart                  # Contrato de checagem de rede
+│   ├── security/
+│   │   └── secure_storage.dart                # Contrato de armazenamento seguro
+│   ├── theme/
+│   │   ├── app_theme.dart                     # ThemeData light/dark
+│   │   └── app_colors.dart                    # Paleta de cores
+│   ├── router/
+│   │   └── app_router.dart                    # Nomes de rotas
+│   ├── widgets/                               # Widgets reutilizáveis
 │   │   ├── custom_button.dart
 │   │   └── loading_indicator.dart
-│   └── transaction/
-│       └── transaction_card.dart
+│   └── utils/
+│       ├── constants.dart                     # Constantes da aplicação
+│       ├── formatters.dart                    # Formatação de moeda/datas
+│       └── validators.dart                    # Validadores de formulário
 │
-├── theme/                         # Tema e estilização
-│   ├── app_theme.dart             # Configuração de temas
-│   └── app_colors.dart            # Paleta de cores
-│
-└── utils/                         # Utilitários
-    ├── constants.dart             # Constantes da aplicação
-    ├── formatters.dart            # Formatação de dados
-    └── validators.dart            # Validações de formulários
+└── features/                                  # Features do produto
+    ├── auth/
+    │   ├── domain/
+    │   │   ├── entities/
+    │   │   │   └── app_user.dart              # Entidade de usuário (Dart puro)
+    │   │   ├── repositories/
+    │   │   │   └── auth_repository.dart       # Contrato (abstract class)
+    │   │   └── usecases/
+    │   │       ├── sign_in.dart
+    │   │       ├── sign_up.dart
+    │   │       ├── sign_out.dart
+    │   │       ├── reset_password.dart
+    │   │       ├── get_current_user.dart
+    │   │       └── watch_auth_state.dart
+    │   ├── data/
+    │   │   ├── datasources/
+    │   │   │   └── firebase_auth_data_source.dart
+    │   │   ├── dtos/
+    │   │   │   └── user_dto.dart              # fromMap/toMap, toEntity/fromEntity
+    │   │   └── repositories/
+    │   │       └── auth_repository_impl.dart  # Traduz Exception em Failure
+    │   └── presentation/
+    │       ├── controllers/
+    │       │   └── auth_controller.dart       # Invoca casos de uso
+    │       └── screens/
+    │           ├── login_screen.dart
+    │           └── register_screen.dart
+    │
+    ├── transactions/
+    │   ├── domain/
+    │   │   ├── entities/
+    │   │   │   ├── transaction_entity.dart    # Renomeada para evitar
+    │   │   │   │                              # colisão com cloud_firestore
+    │   │   │   ├── transaction_type.dart
+    │   │   │   └── transaction_category.dart
+    │   │   ├── repositories/
+    │   │   │   └── transaction_repository.dart
+    │   │   └── usecases/
+    │   │       ├── watch_transactions.dart    # Stream<List<TransactionEntity>>
+    │   │       ├── create_transaction.dart
+    │   │       ├── update_transaction.dart
+    │   │       └── delete_transaction.dart
+    │   ├── data/
+    │   │   ├── datasources/
+    │   │   │   ├── firestore_transaction_data_source.dart
+    │   │   │   └── firebase_storage_data_source.dart
+    │   │   ├── dtos/
+    │   │   │   └── transaction_dto.dart
+    │   │   └── repositories/
+    │   │       └── transaction_repository_impl.dart
+    │   └── presentation/
+    │       ├── controllers/
+    │       │   └── transaction_controller.dart
+    │       ├── screens/
+    │       │   ├── dashboard_screen.dart
+    │       │   ├── transaction_list_screen.dart
+    │       │   ├── transaction_form_screen.dart
+    │       │   └── transaction_detail_screen.dart
+    │       └── widgets/
+    │           └── transaction_card.dart
+    │
+    └── profile/
+        ├── domain/
+        │   ├── entities/
+        │   │   └── app_theme_mode.dart        # Enum de domínio para tema
+        │   ├── repositories/
+        │   │   └── theme_repository.dart
+        │   └── usecases/
+        │       ├── get_theme_mode.dart
+        │       └── set_theme_mode.dart
+        ├── data/
+        │   ├── datasources/
+        │   │   └── preferences_data_source.dart
+        │   └── repositories/
+        │       └── theme_repository_impl.dart
+        └── presentation/
+            ├── controllers/
+            │   └── theme_controller.dart
+            └── screens/
+                └── profile_screen.dart
 ```
 
 ---
@@ -293,25 +362,55 @@ service firebase.storage {
 
 ## 🏗️ Arquitetura
 
-O projeto segue uma arquitetura em camadas:
+O projeto adota **Clean Architecture** em três camadas, organizadas por feature
+(`auth`, `transactions`, `profile`). A regra de dependência aponta sempre para
+o domínio: `Presentation → Domain ← Data`.
 
-1. **Presentation Layer** (Screens & Widgets)
-   - Responsável pela UI e interação do usuário
-   - Consome dados dos Providers
+### 1. Domínio (`features/<x>/domain/`)
 
-2. **State Management Layer** (Providers)
-   - Gerencia o estado da aplicação
-   - Usa o padrão Provider do Flutter
-   - Notifica a UI sobre mudanças de estado
+- **Entidades**: classes Dart puras, imutáveis, sem qualquer import de
+  `package:flutter`, `package:firebase_*` ou `package:cloud_firestore`.
+- **Repositórios (interfaces)**: contratos `abstract class` que descrevem
+  operações de negócio em termos de entidades, retornando
+  `Future<Either<Failure, T>>` ou `Stream<T>`.
+- **Casos de Uso**: classes com método único `call(...)` encapsulando uma
+  intenção do usuário (`SignIn`, `CreateTransaction`, `WatchTransactions`,
+  etc.).
 
-3. **Business Logic Layer** (Services)
-   - Contém a lógica de negócio
-   - Integração com Firebase (Auth, Firestore, Storage)
-   - Independente da UI
+### 2. Dados (`features/<x>/data/`)
 
-4. **Data Layer** (Models)
-   - Define estruturas de dados
-   - Serialização/Deserialização para Firestore
+- **DTOs**: representam o formato remoto (Firestore). Possuem `fromMap`/
+  `toMap` e `toEntity()`/`fromEntity()`, isolando o esquema remoto do
+  domínio.
+- **Data Sources**: classes que falam diretamente com Firebase
+  (`firebase_auth`, `cloud_firestore`, `firebase_storage`) e
+  `shared_preferences`. Não conhecem entidades.
+- **Repositórios (implementações)**: traduzem `Exception` em `Failure`
+  tipadas e orquestram fontes de dados.
+
+### 3. Apresentação (`features/<x>/presentation/`)
+
+- **Controllers**: invocam casos de uso e expõem estado observável via
+  `ChangeNotifier`/`Provider`. Não conhecem Firebase nem repositórios
+  diretamente.
+- **Screens e Widgets**: consomem o estado dos controllers e renderizam
+  a UI; nunca chamam casos de uso ou Firebase diretamente.
+
+### Diagrama de Dependências
+
+```
+Presentation ──► Domain ◄── Data
+   (Flutter)    (Dart puro)   (Firebase, shared_preferences)
+```
+
+Apresentação e Dados dependem do Domínio; o Domínio não depende de ninguém.
+
+### Composition Root
+
+`lib/core/di/dependencies.dart` concentra a montagem das árvores de objetos
+das três features e expõe builders de controllers (`buildAuthController`,
+`buildTransactionController`, `buildThemeController`) consumidos pelo
+`MultiProvider` em `app.dart`.
 
 ---
 
