@@ -36,6 +36,9 @@ dependencies:
   path_provider: ^2.1.5
   shared_preferences: ^2.3.5
 
+  # Functional types (Either/Failure contract used by the domain layer)
+  fpdart: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

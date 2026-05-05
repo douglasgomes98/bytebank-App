@@ -13,7 +13,7 @@ import 'package:bytebank_app/app.dart';
 void main() {
   testWidgets('ByteBank app loads correctly', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const ByteBankApp());
+    await tester.pumpWidget(ByteBankApp());
 
     // Let the app build
     await tester.pumpAndSettle();
