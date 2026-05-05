@@ -12,7 +12,7 @@
 
 ## 📋 Sobre o Projeto
 
-ByteBank é uma aplicação mobile de simulação bancária desenvolvida como parte do **Tech Challenge da Fase 3** do curso de pós-graduação em **Front-End Engineering da FIAP**. 
+ByteBank é uma aplicação mobile de simulação bancária desenvolvida como parte do **Tech Challenge da Fase 4** do curso de pós-graduação em **Front-End Engineering da FIAP**. 
 
 O aplicativo permite aos usuários realizar operações bancárias simuladas como transferências, depósitos e saques, demonstrando habilidades em:
 - Desenvolvimento Flutter
@@ -364,7 +364,7 @@ Contribuições são bem-vindas! Sinta-se à vontade para:
 
 ## 👥 Autores
 
-**Grupo 30 - FIAP Fase 3**
+**Grupo 30 - FIAP Fase 4**
 
 - Desenvolvido como Tech Challenge da Pós-Graduação Front-End Engineering
 
