@@ -51,5 +51,16 @@
 	<string>ByteBank precisa acessar a câmera para fotografar comprovantes.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>ByteBank precisa salvar imagens na sua galeria.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>ByteBank usa o Face ID para confirmar sua identidade ao acessar suas informações financeiras.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<false/>
+	</dict>
 </dict>
 </plist>

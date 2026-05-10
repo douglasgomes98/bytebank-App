@@ -1,11 +1,9 @@
 /// Contrato de armazenamento seguro consumido pela camada de dados.
 ///
-/// Reservado, conforme o item 9 da proposta arquitetural, para a integração
-/// futura com `flutter_secure_storage` (Keychain no iOS, EncryptedShared
-/// Preferences no Android). Esta classe define o contrato mínimo que o
-/// `SecureCredentialsDataSource` da feature `auth` consumirá quando a
-/// integração for habilitada, evitando dependência em tipos concretos da
-/// camada de dados.
+/// Persiste valores sensíveis exclusivamente em enclaves do sistema
+/// operacional (Keychain no iOS, Keystore/EncryptedSharedPreferences no
+/// Android). O contrato é Dart puro para que o domínio não dependa do
+/// pacote `flutter_secure_storage`.
 library;
 
 /// Abstração para leitura, escrita e remoção de valores sensíveis em
@@ -19,4 +17,11 @@ abstract class SecureStorage {
 
   /// Remove o valor associado a [key].
   Future<void> delete({required String key});
+
+  /// Remove todos os valores deste storage. Usado, por exemplo, no
+  /// logout para invalidar credenciais residuais.
+  Future<void> deleteAll();
+
+  /// `true` quando há valor associado a [key].
+  Future<bool> containsKey({required String key});
 }

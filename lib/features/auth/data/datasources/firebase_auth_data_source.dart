@@ -129,4 +129,25 @@ class FirebaseAuthDataSource {
       );
     }
   }
+
+  /// Força um refresh do ID token do usuário atual.
+  ///
+  /// Útil antes de operações sensíveis: garante que o backend
+  /// receberá um token recém-emitido. Lança [AuthException] se a
+  /// sessão estiver ausente, revogada ou se o servidor recusar o
+  /// refresh.
+  Future<void> refreshIdToken() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('Sessão não encontrada', code: 'no-session');
+    }
+    try {
+      await user.getIdToken(true);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(
+        e.message ?? 'Não foi possível revalidar a sessão',
+        code: e.code,
+      );
+    }
+  }
 }

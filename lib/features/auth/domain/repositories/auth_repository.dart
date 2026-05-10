@@ -40,4 +40,9 @@ abstract class AuthRepository {
 
   /// Envia um e-mail de redefinição de senha para [email].
   Future<Either<Failure, Unit>> resetPassword(String email);
+
+  /// Força a revalidação do token de sessão atual antes de uma operação
+  /// sensível, garantindo que a credencial usada nas requisições
+  /// subsequentes não esteja expirada ou revogada.
+  Future<Either<Failure, Unit>> ensureFreshSession();
 }

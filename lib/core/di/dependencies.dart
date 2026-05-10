@@ -1,6 +1,10 @@
 import '../../features/auth/data/datasources/firebase_auth_data_source.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
+import '../../features/auth/data/security/aes_gcm_crypto_service.dart';
+import '../../features/auth/data/security/flutter_secure_storage_adapter.dart';
+import '../../features/auth/data/security/local_auth_biometric_authenticator.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
+import '../../features/auth/domain/usecases/ensure_fresh_session.dart';
 import '../../features/auth/domain/usecases/get_current_user.dart';
 import '../../features/auth/domain/usecases/reset_password.dart';
 import '../../features/auth/domain/usecases/sign_in.dart';
@@ -23,16 +27,37 @@ import '../../features/transactions/domain/usecases/delete_transaction.dart';
 import '../../features/transactions/domain/usecases/update_transaction.dart';
 import '../../features/transactions/domain/usecases/watch_transactions.dart';
 import '../../features/transactions/presentation/controllers/transaction_controller.dart';
+import '../security/biometric_authenticator.dart';
+import '../security/crypto_service.dart';
+import '../security/secure_storage.dart';
+import '../security/session_lock_controller.dart';
 
 /// Composition root da aplicação.
 ///
 /// Concentra a montagem das árvores de objetos das três features (auth,
-/// transactions, profile), expondo apenas os controllers prontos para
-/// serem fornecidos à árvore de widgets via `MultiProvider`. Equivale,
-/// neste estágio, ao papel descrito em `core/di/` da proposta
-/// arquitetural (item 4) — utilizando construtores explícitos em vez de
-/// um container externo.
+/// transactions, profile) e dos serviços transversais de segurança,
+/// expondo apenas os controllers prontos para serem fornecidos à árvore
+/// de widgets via `MultiProvider`.
 class AppDependencies {
+  // -------- Security (transversal) --------
+  late final SecureStorage _secureStorage = FlutterSecureStorageAdapter();
+
+  /// Serviço de criptografia simétrica disponível para qualquer feature
+  /// que precise cifrar dados sensíveis em cache local.
+  late final CryptoService cryptoService =
+      AesGcmCryptoService(secureStorage: _secureStorage);
+
+  /// Autenticador biométrico do dispositivo.
+  late final BiometricAuthenticator biometricAuthenticator =
+      LocalAuthBiometricAuthenticator();
+
+  /// Controlador de bloqueio de sessão por biometria.
+  late final SessionLockController sessionLockController =
+      SessionLockController(
+    secureStorage: _secureStorage,
+    authenticator: biometricAuthenticator,
+  );
+
   // -------- Auth --------
   late final FirebaseAuthDataSource _authDataSource =
       FirebaseAuthDataSource();
@@ -60,6 +85,10 @@ class AppDependencies {
   late final WatchAuthState watchAuthStateUseCase =
       WatchAuthState(_authRepository);
 
+  /// Caso de uso de revalidação de sessão pré-configurado.
+  late final EnsureFreshSession ensureFreshSessionUseCase =
+      EnsureFreshSession(_authRepository);
+
   // -------- Transactions --------
   late final FirestoreTransactionDataSource _transactionDataSource =
       FirestoreTransactionDataSource();
@@ -76,16 +105,22 @@ class AppDependencies {
       WatchTransactions(_transactionRepository);
 
   /// Caso de uso de criação de transação pré-configurado.
-  late final CreateTransaction createTransactionUseCase =
-      CreateTransaction(_transactionRepository);
+  late final CreateTransaction createTransactionUseCase = CreateTransaction(
+    _transactionRepository,
+    ensureFreshSessionUseCase,
+  );
 
   /// Caso de uso de atualização de transação pré-configurado.
-  late final UpdateTransaction updateTransactionUseCase =
-      UpdateTransaction(_transactionRepository);
+  late final UpdateTransaction updateTransactionUseCase = UpdateTransaction(
+    _transactionRepository,
+    ensureFreshSessionUseCase,
+  );
 
   /// Caso de uso de exclusão de transação pré-configurado.
-  late final DeleteTransaction deleteTransactionUseCase =
-      DeleteTransaction(_transactionRepository);
+  late final DeleteTransaction deleteTransactionUseCase = DeleteTransaction(
+    _transactionRepository,
+    ensureFreshSessionUseCase,
+  );
 
   // -------- Profile (Theme) --------
   late final PreferencesDataSource _preferencesDataSource =
@@ -111,6 +146,7 @@ class AppDependencies {
         resetPassword: resetPasswordUseCase,
         getCurrentUser: getCurrentUserUseCase,
         watchAuthState: watchAuthStateUseCase,
+        secureStorage: _secureStorage,
       );
 
   /// Cria um [TransactionController] novo já ligado aos casos de uso.
