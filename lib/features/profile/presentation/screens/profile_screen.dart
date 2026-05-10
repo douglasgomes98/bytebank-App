@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/security/biometric_authenticator.dart';
+import '../../../../core/security/session_lock_controller.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../transactions/presentation/controllers/transaction_controller.dart';
@@ -9,8 +11,7 @@ import '../controllers/theme_controller.dart';
 /// Tela de perfil do usuário.
 ///
 /// Exibe avatar, nome e e-mail, totais agregados das transações e os
-/// controles de tema e logout. Reúne os três controllers (auth,
-/// transactions e theme) por meio de [Provider.of].
+/// controles de tema, segurança e logout.
 class ProfileScreen extends StatelessWidget {
   /// Cria a [ProfileScreen].
   const ProfileScreen({super.key});
@@ -20,6 +21,7 @@ class ProfileScreen extends StatelessWidget {
     final user = context.watch<AuthController>().user;
     final themeController = context.watch<ThemeController>();
     final txController = context.watch<TransactionController>();
+    final lockController = context.watch<SessionLockController>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Perfil')),
@@ -122,6 +124,8 @@ class ProfileScreen extends StatelessWidget {
                     secondary: const Icon(Icons.dark_mode_outlined),
                   ),
                   const Divider(height: 1),
+                  _BiometricSwitch(controller: lockController),
+                  const Divider(height: 1),
                   ListTile(
                     leading:
                         const Icon(Icons.logout, color: Colors.red),
@@ -170,6 +174,102 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Switch para ativar/desativar a exigência de biometria ao reabrir o
+/// app. Consome a disponibilidade real do hardware via
+/// [BiometricAuthenticator] (injetado por `Provider`) e a flag
+/// persistida via [SessionLockController].
+class _BiometricSwitch extends StatefulWidget {
+  const _BiometricSwitch({required this.controller});
+
+  final SessionLockController controller;
+
+  @override
+  State<_BiometricSwitch> createState() => _BiometricSwitchState();
+}
+
+class _BiometricSwitchState extends State<_BiometricSwitch> {
+  Future<_BiometricSettings>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<_BiometricSettings> _load() async {
+    final auth = context.read<BiometricAuthenticator>();
+    final availability = await auth.availability();
+    final enabled = await widget.controller.isBiometricEnabled();
+    return _BiometricSettings(availability: availability, enabled: enabled);
+  }
+
+  Future<void> _toggle(bool value, _BiometricSettings current) async {
+    if (value && current.availability != BiometricAvailability.available) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_unavailableMessage(current.availability))),
+      );
+      return;
+    }
+    await widget.controller.setBiometricEnabled(value);
+    if (!mounted) return;
+    setState(() {
+      _future = Future.value(
+        _BiometricSettings(
+          availability: current.availability,
+          enabled: value,
+        ),
+      );
+    });
+  }
+
+  String _unavailableMessage(BiometricAvailability availability) {
+    switch (availability) {
+      case BiometricAvailability.notEnrolled:
+        return 'Cadastre uma biometria nas configurações do dispositivo.';
+      case BiometricAvailability.unavailable:
+      case BiometricAvailability.available:
+        return 'Biometria indisponível neste dispositivo.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_BiometricSettings>(
+      future: _future,
+      builder: (context, snapshot) {
+        final data = snapshot.data;
+        final supported =
+            data?.availability == BiometricAvailability.available;
+        return SwitchListTile(
+          title: const Text('Bloqueio por biometria'),
+          subtitle: Text(
+            supported
+                ? 'Exigir biometria ao reabrir o app'
+                : _unavailableMessage(
+                    data?.availability ??
+                        BiometricAvailability.unavailable,
+                  ),
+          ),
+          value: supported && (data?.enabled ?? false),
+          onChanged:
+              data == null || !supported ? null : (v) => _toggle(v, data),
+          secondary: const Icon(Icons.fingerprint_outlined),
+        );
+      },
+    );
+  }
+}
+
+class _BiometricSettings {
+  const _BiometricSettings({
+    required this.availability,
+    required this.enabled,
+  });
+
+  final BiometricAvailability availability;
+  final bool enabled;
 }
 
 /// Bloco de estatística (valor + rótulo) reutilizado dentro do cartão

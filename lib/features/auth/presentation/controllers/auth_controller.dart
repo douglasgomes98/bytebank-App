@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/security/secure_storage.dart';
+import '../../../../core/security/secure_storage_keys.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/usecases/get_current_user.dart';
 import '../../domain/usecases/reset_password.dart';
@@ -42,6 +44,7 @@ class AuthController extends ChangeNotifier {
   final ResetPassword _resetPassword;
   final GetCurrentUser _getCurrentUser;
   final WatchAuthState _watchAuthState;
+  final SecureStorage _secureStorage;
 
   StreamSubscription<AppUser?>? _authSubscription;
 
@@ -61,12 +64,14 @@ class AuthController extends ChangeNotifier {
     required ResetPassword resetPassword,
     required GetCurrentUser getCurrentUser,
     required WatchAuthState watchAuthState,
+    required SecureStorage secureStorage,
   })  : _signIn = signIn,
         _signUp = signUp,
         _signOut = signOut,
         _resetPassword = resetPassword,
         _getCurrentUser = getCurrentUser,
-        _watchAuthState = watchAuthState {
+        _watchAuthState = watchAuthState,
+        _secureStorage = secureStorage {
     _authSubscription = _watchAuthState().listen(_onAuthStateChanged);
   }
 
@@ -163,7 +168,10 @@ class AuthController extends ChangeNotifier {
   }
 
   /// Encerra a sessão atual e retorna ao estado
-  /// [AuthStatus.unauthenticated].
+  /// [AuthStatus.unauthenticated]. Também invalida credenciais residuais
+  /// no armazenamento seguro, com exceção da chave criptográfica
+  /// mestra (que precisa sobreviver ao logout para preservar caches
+  /// cifrados de outros usuários no mesmo dispositivo).
   Future<void> signOut() async {
     final result = await _signOut();
     result.fold(
@@ -171,11 +179,19 @@ class AuthController extends ChangeNotifier {
         _errorMessage = failure.message;
         notifyListeners();
       },
-      (_) {
+      (_) async {
+        await _wipeUserScopedSecureStorage();
         _user = null;
         _status = AuthStatus.unauthenticated;
         notifyListeners();
       },
+    );
+  }
+
+  Future<void> _wipeUserScopedSecureStorage() async {
+    await _secureStorage.delete(key: SecureStorageKeys.biometricEnabled);
+    await _secureStorage.delete(
+      key: SecureStorageKeys.lastSignedInEmailCiphertext,
     );
   }
 

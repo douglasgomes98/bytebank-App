@@ -94,6 +94,14 @@ shared_preferences: ^2.3.5      # Armazenamento local de preferências
 fpdart: ^1.1.0                  # Either/Failure no contrato do domínio
 ```
 
+#### Segurança
+```yaml
+flutter_secure_storage: ^9.2.2  # Keystore/Keychain
+local_auth: ^2.3.0              # Biometria local
+cryptography: ^2.7.0            # AES-GCM (NIST SP 800-38D)
+firebase_app_check: ^0.3.2      # Integridade de plataforma
+```
+
 ---
 
 ## 📁 Estrutura do Projeto
@@ -357,6 +365,107 @@ service firebase.storage {
   }
 }
 ```
+
+---
+
+## Segurança
+
+A camada transversal de segurança implementa os controles previstos no item 9
+da proposta arquitetural, com referências aos requisitos do OWASP MASVS v2.0.0.
+
+### Controles aplicados
+
+- **Autenticação**: Firebase Authentication mantido como provedor remoto;
+  biometria local opcional (`local_auth`) gateando a reabertura do app
+  quando habilitada pelo usuário.
+- **Token freshness**: cada operação sensível (criação, atualização e
+  exclusão de transação) força um refresh do ID token via caso de uso
+  `EnsureFreshSession` antes da gravação no Firestore.
+- **Armazenamento seguro**: dados sensíveis em Keychain (iOS) e
+  EncryptedSharedPreferences/Keystore (Android), via
+  `flutter_secure_storage`.
+- **Criptografia em repouso**: AES-GCM 256 (NIST SP 800-38D) sobre dados
+  cacheados localmente, com chave mestra gerada na primeira execução e
+  persistida exclusivamente no enclave do sistema operacional.
+- **Comunicação**: TLS obrigatório. Tráfego cleartext bloqueado em Android
+  (`usesCleartextTraffic="false"` + Network Security Config) e em iOS
+  (`NSAppTransportSecurity` com `NSAllowsArbitraryLoads=false`).
+- **Integridade de plataforma**: Firebase App Check com Play Integrity
+  (Android), App Attest com fallback para DeviceCheck (iOS) e
+  DebugProvider em modo desenvolvimento.
+- **Hardening do build (Android release)**: R8/ProGuard com regras
+  específicas para Firebase, Flutter Engine, `local_auth` e
+  `flutter_secure_storage`; `allowBackup="false"` e
+  `dataExtractionRules` excluindo dados do app.
+- **Logger seguro**: utilitário com supressão automática em
+  `kReleaseMode` e helper para redatar identificadores antes de
+  qualquer escrita.
+- **Regras Firebase**: validação de schema (campos obrigatórios, tipos,
+  limites de valor e tamanho) em `firestore.rules`; restrição a
+  `image/*` e tamanho máximo de 5 MiB em `storage.rules`.
+
+### Configuração obrigatória no Firebase Console
+
+App Check exige cadastro fora do código:
+
+1. `Build > App Check > Apps > [app Android]` > `Manage debug tokens`:
+   adicionar o UUID que o SDK imprime no log na primeira execução em
+   debug. Sem esse passo, builds debug são bloqueados quando o
+   enforcement estiver ativo.
+2. Em release, registrar Play Integrity (Android) com o SHA-256 da
+   chave de assinatura e App Attest (iOS) com Team ID + Key ID.
+3. Manter App Check em modo **Monitor** em Firestore, Storage e
+   Authentication antes de habilitar **Enforce**, evitando bloquear
+   versões antigas em produção durante a transição.
+
+Após atualizar `firestore.rules` e `storage.rules` localmente, publicar:
+
+```bash
+firebase deploy --only firestore:rules
+firebase deploy --only storage
+```
+
+### Build endurecido (release Android)
+
+```bash
+flutter build apk --release --obfuscate --split-debug-info=build/symbols/
+```
+
+A flag `--obfuscate` ofusca os símbolos Dart; `--split-debug-info`
+preserva os símbolos fora do APK para depuração futura. R8/ProGuard são
+acionados automaticamente pelo `build.gradle.kts`.
+
+### Validação da biometria em emulador Android
+
+Em emuladores, a UI de cadastro de impressão digital frequentemente não
+persiste a biometria no `BiometricService` se o evento de toque do
+sensor virtual não for explicitamente sinalizado. O fluxo de validação
+é:
+
+1. Em **Settings > Security & privacy > Device unlock**, configurar um
+   PIN como bloqueio de tela (sem isso o Android não permite biometria
+   real).
+2. Em **Fingerprint Unlock**, iniciar o cadastro.
+3. Quando o sistema solicitar **"Touch the sensor"**, simular o toque
+   pelo `adb`:
+
+   ```bash
+   adb -e emu finger touch 1
+   ```
+
+   Repetir o comando até o sistema concluir o cadastro.
+4. Verificar a contagem efetiva de impressões registradas:
+
+   ```bash
+   adb shell 'dumpsys fingerprint | grep count'
+   ```
+
+   `count: 1` (ou maior) indica que o `BiometricService` reconhece a
+   biometria.
+5. Após login no app, abrir **Perfil** e ativar **"Bloqueio por
+   biometria"**. Mover o app para background e retornar (ou matar e
+   reabrir): a tela "Acesso bloqueado" exigirá reconfirmação biométrica
+   antes de mostrar conteúdo sensível.
 
 ---
 

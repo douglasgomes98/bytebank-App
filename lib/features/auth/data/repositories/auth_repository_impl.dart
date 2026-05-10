@@ -102,6 +102,18 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, Unit>> ensureFreshSession() async {
+    try {
+      await _dataSource.refreshIdToken();
+      return const Right(unit);
+    } on AuthException catch (e) {
+      return Left(_mapAuthFailure(e));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message, code: e.code));
+    }
+  }
+
   /// Traduz um [AuthException] para uma [AuthFailure] com mensagem em
   /// português, preservando a mesma tabela de mapeamento usada
   /// anteriormente em `AuthProvider._mapFirebaseError`.
