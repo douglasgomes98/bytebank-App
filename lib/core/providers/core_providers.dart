@@ -27,7 +27,8 @@ SecureStorage secureStorage(SecureStorageRef ref) =>
     FlutterSecureStorageAdapter();
 
 @Riverpod(keepAlive: true)
-CryptoService cryptoService(CryptoServiceRef ref) => AesGcmCryptoService();
+CryptoService cryptoService(CryptoServiceRef ref) =>
+    AesGcmCryptoService(secureStorage: ref.watch(secureStorageProvider));
 
 @Riverpod(keepAlive: true)
 BiometricAuthenticator biometricAuthenticator(BiometricAuthenticatorRef ref) =>

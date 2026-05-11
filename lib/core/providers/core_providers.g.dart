@@ -74,7 +74,7 @@ final secureStorageProvider = Provider<SecureStorage>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef SecureStorageRef = ProviderRef<SecureStorage>;
-String _$cryptoServiceHash() => r'2a37376e598d125049b58b1ea202d85a7f1d323c';
+String _$cryptoServiceHash() => r'8e9c3e2ac0f7e9239505c1a428edcc040ef7dca2';
 
 /// See also [cryptoService].
 @ProviderFor(cryptoService)
