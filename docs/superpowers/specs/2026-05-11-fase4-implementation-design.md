@@ -147,15 +147,16 @@ rxdart: ^0.27.x
 `TransactionRepository` adds:
 - `Future<Either<Failure, List<TransactionEntity>>> fetchNextPage(String userId, DocumentSnapshot lastDoc)`
 
-`TransactionUiState` (new value object):
+`TransactionUiState` (new value object, domain-safe — no Firestore types):
 ```dart
 class TransactionUiState {
   final List<TransactionEntity> transactions;
   final double balance;
   final bool hasMore;
-  final DocumentSnapshot? lastDoc;
 }
 ```
+
+`lastDoc` (`DocumentSnapshot`) stays internal to `TransactionNotifier` in the presentation layer — never leaks into the domain or UI state.
 
 ### rxdart operators
 
