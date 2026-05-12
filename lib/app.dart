@@ -40,7 +40,6 @@ class _ByteBankAppState extends ConsumerState<ByteBankApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
       ref.read(sessionLockNotifierProvider.notifier).lock();
     }

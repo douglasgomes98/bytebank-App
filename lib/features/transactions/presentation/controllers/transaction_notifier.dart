@@ -17,9 +17,11 @@ class TransactionNotifier extends _$TransactionNotifier {
 
   @override
   FutureOr<TransactionUiState> build() async {
+    _loadingMore = false;
+    _lastFetchedId = null;
+
     final user = ref.watch(authStateStreamProvider).valueOrNull;
     if (user == null) {
-      _lastFetchedId = null;
       return const TransactionUiState(
         transactions: [],
         balance: 0,
@@ -64,7 +66,8 @@ class TransactionNotifier extends _$TransactionNotifier {
     final realtimeIds = realtimeList.map((t) => t.id).toSet();
     final paginatedTail =
         current.transactions.where((t) => !realtimeIds.contains(t.id)).toList();
-    final merged = [...realtimeList, ...paginatedTail];
+    final merged = [...realtimeList, ...paginatedTail]
+      ..sort((a, b) => b.date.compareTo(a.date));
     state = AsyncData(_buildUiState(
       merged,
       hasMore: current.hasMore,
@@ -91,15 +94,15 @@ class TransactionNotifier extends _$TransactionNotifier {
 
   Future<void> fetchNextPage() async {
     if (_loadingMore) return;
-    final current = state.valueOrNull;
-    if (current == null || !current.hasMore) return;
+    final initial = state.valueOrNull;
+    if (initial == null || !initial.hasMore) return;
     if (_lastFetchedId == null) return;
 
     final user = ref.read(authStateStreamProvider).valueOrNull;
     if (user == null) return;
 
     _loadingMore = true;
-    state = AsyncData(current.copyWith(isLoadingMore: true));
+    state = AsyncData(initial.copyWith(isLoadingMore: true));
     try {
       final result = await ref.read(fetchNextPageProvider).call(
             userId: user.id,
@@ -108,18 +111,26 @@ class TransactionNotifier extends _$TransactionNotifier {
 
       result.fold(
         (_) {
-          state = AsyncData(current.copyWith(isLoadingMore: false));
+          final latest = state.valueOrNull;
+          if (latest != null) {
+            state = AsyncData(latest.copyWith(isLoadingMore: false));
+          }
         },
         (newItems) {
+          final latest = state.valueOrNull ?? initial;
           if (newItems.isEmpty) {
-            state = AsyncData(current.copyWith(
+            state = AsyncData(latest.copyWith(
               hasMore: false,
               isLoadingMore: false,
             ));
             return;
           }
           _lastFetchedId = newItems.last.id;
-          final merged = [...current.transactions, ...newItems];
+          final existingIds = latest.transactions.map((t) => t.id).toSet();
+          final dedup =
+              newItems.where((t) => !existingIds.contains(t.id)).toList();
+          final merged = [...latest.transactions, ...dedup]
+            ..sort((a, b) => b.date.compareTo(a.date));
           state = AsyncData(_buildUiState(
             merged,
             hasMore: newItems.length >= AppConstants.transactionsPageSize,
