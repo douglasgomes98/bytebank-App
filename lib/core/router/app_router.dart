@@ -15,9 +15,8 @@ part 'app_router.g.dart';
 
 @Riverpod(keepAlive: true)
 GoRouter appRouter(AppRouterRef ref) {
-  final notifier = GoRouterRefreshNotifier(
-    ref.watch(authStateStreamProvider.stream),
-  );
+  final notifier = GoRouterRefreshNotifier();
+  ref.listen(authNotifierProvider, (prev, next) => notifier.refresh());
   ref.onDispose(notifier.dispose);
 
   return GoRouter(
@@ -27,7 +26,7 @@ GoRouter appRouter(AppRouterRef ref) {
       final authAsync = ref.read(authNotifierProvider);
       return authAsync.when(
         loading: () => null,
-        error: (_, __) => '/login',
+        error: (context, state) => '/login',
         data: (user) {
           final isLoggedIn = user != null;
           final isOnAuthRoute = state.matchedLocation == '/login' ||
@@ -39,16 +38,16 @@ GoRouter appRouter(AppRouterRef ref) {
       );
     },
     routes: [
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
-      GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
+      GoRoute(path: '/dashboard', builder: (context, state) => const DashboardScreen()),
       GoRoute(
         path: '/transactions',
-        builder: (_, __) => const TransactionListScreen(),
+        builder: (context, state) => const TransactionListScreen(),
         routes: [
           GoRoute(
             path: 'new',
-            builder: (_, __) => const TransactionFormScreen(),
+            builder: (context, state) => const TransactionFormScreen(),
           ),
           GoRoute(
             path: ':id',
@@ -58,7 +57,7 @@ GoRouter appRouter(AppRouterRef ref) {
           ),
         ],
       ),
-      GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
     ],
   );
 }
