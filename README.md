@@ -15,11 +15,14 @@
 ByteBank é uma aplicação mobile de simulação bancária desenvolvida como parte do **Tech Challenge da Fase 4** do curso de pós-graduação em **Front-End Engineering da FIAP**. 
 
 O aplicativo permite aos usuários realizar operações bancárias simuladas como transferências, depósitos e saques, demonstrando habilidades em:
-- Desenvolvimento Flutter
-- Design responsivo e Material Design 3
-- Gerenciamento de estado com Provider
-- Integração com Firebase (Auth, Firestore, Storage)
-- Boas práticas de arquitetura mobile
+- Desenvolvimento Flutter com Material Design 3
+- Clean Architecture (camadas de domínio, dados e apresentação) com modularização feature-first
+- Gerenciamento de estado avançado com **Riverpod** (geração de código)
+- Programação reativa com **Streams** e **RxDart**
+- Roteamento declarativo com **go_router**
+- Integração com Firebase (Auth, Firestore, Storage, App Check)
+- Segurança em profundidade (OWASP MASVS v2.0.0): biometria, AES-GCM, Secure Storage, App Check, hardening do build
+- Performance: paginação Firestore, precache de imagens, `RepaintBoundary`, R8/ProGuard
 
 ---
 
@@ -62,11 +65,25 @@ firebase_core: ^3.13.0          # Núcleo do Firebase
 firebase_auth: ^5.5.2           # Autenticação de usuários
 cloud_firestore: ^5.6.5         # Banco de dados NoSQL
 firebase_storage: ^12.4.4       # Armazenamento de arquivos
+firebase_app_check: ^0.3.2      # Integridade de plataforma
 ```
 
 #### Gerenciamento de Estado
 ```yaml
-provider: ^6.1.2                # State management
+flutter_riverpod: ^2.5.1        # State management com AsyncNotifier/StreamProvider
+riverpod_annotation: ^2.3.5     # Anotações para code generation
+riverpod_generator: ^2.4.3      # (dev) Geração dos providers
+build_runner: ^2.4.13           # (dev) Runner do code generation
+```
+
+#### Roteamento
+```yaml
+go_router: ^14.6.1              # Roteamento declarativo + redirect guard
+```
+
+#### Programação Reativa
+```yaml
+rxdart: ^0.28.0                 # debounceTime, BehaviorSubject, combineLatest
 ```
 
 #### UI & Visualização
@@ -99,7 +116,13 @@ fpdart: ^1.1.0                  # Either/Failure no contrato do domínio
 flutter_secure_storage: ^9.2.2  # Keystore/Keychain
 local_auth: ^2.3.0              # Biometria local
 cryptography: ^2.7.0            # AES-GCM (NIST SP 800-38D)
-firebase_app_check: ^0.3.2      # Integridade de plataforma
+```
+
+#### Testes
+```yaml
+flutter_test                    # Núcleo de testes Flutter
+mocktail: ^1.0.4                # (dev) Mocks para repositórios e casos de uso
+fake_cloud_firestore: ^3.0.3    # (dev) Firestore em memória
 ```
 
 ---
@@ -113,35 +136,45 @@ sem regra de negócio.
 
 ```
 lib/
-├── main.dart                                  # Ponto de entrada da aplicação
-├── app.dart                                   # Composition root + MaterialApp
+├── main.dart                                  # Bootstrap: Firebase + App Check + Riverpod ProviderScope
+├── app.dart                                   # MaterialApp.router + lock biométrico de ciclo de vida
 ├── firebase_options.dart                      # Configurações do Firebase
 │
 ├── core/                                      # Código transversal sem regra de negócio
-│   ├── di/
-│   │   └── dependencies.dart                  # Composition root das features
+│   ├── providers/
+│   │   └── core_providers.dart                # Providers de FirebaseAuth/Firestore/Storage
 │   ├── error/
 │   │   ├── failure.dart                       # Hierarquia selada de Failure
 │   │   └── exceptions.dart                    # Exceções da camada de dados
 │   ├── network/
 │   │   └── network_info.dart                  # Contrato de checagem de rede
 │   ├── security/
-│   │   └── secure_storage.dart                # Contrato de armazenamento seguro
+│   │   ├── secure_storage.dart                # Contrato de armazenamento seguro
+│   │   ├── secure_storage_keys.dart           # Chaves usadas no Keychain/Keystore
+│   │   ├── crypto_service.dart                # Contrato AES-GCM
+│   │   ├── biometric_authenticator.dart       # Contrato de biometria
+│   │   ├── app_check_bootstrap.dart           # Ativa Play Integrity/App Attest/Debug
+│   │   └── session_lock_notifier.dart         # Notifier que bloqueia ao perder foco
 │   ├── theme/
 │   │   ├── app_theme.dart                     # ThemeData light/dark
 │   │   └── app_colors.dart                    # Paleta de cores
 │   ├── router/
-│   │   └── app_router.dart                    # Nomes de rotas
+│   │   ├── app_router.dart                    # GoRouter + redirect guard por auth
+│   │   └── go_router_refresh_notifier.dart    # Ponte Riverpod → GoRouter refresh
 │   ├── widgets/                               # Widgets reutilizáveis
 │   │   ├── custom_button.dart
-│   │   └── loading_indicator.dart
+│   │   ├── loading_indicator.dart
+│   │   └── splash_screen.dart
 │   └── utils/
 │       ├── constants.dart                     # Constantes da aplicação
 │       ├── formatters.dart                    # Formatação de moeda/datas
-│       └── validators.dart                    # Validadores de formulário
+│       ├── validators.dart                    # Validadores de formulário
+│       └── secure_logger.dart                 # Logger no-op em kReleaseMode
 │
 └── features/                                  # Features do produto
     ├── auth/
+    │   ├── providers/
+    │   │   └── auth_providers.dart            # @Riverpod para repo, datasource e use cases
     │   ├── domain/
     │   │   ├── entities/
     │   │   │   └── app_user.dart              # Entidade de usuário (Dart puro)
@@ -153,32 +186,40 @@ lib/
     │   │       ├── sign_out.dart
     │   │       ├── reset_password.dart
     │   │       ├── get_current_user.dart
-    │   │       └── watch_auth_state.dart
+    │   │       ├── watch_auth_state.dart
+    │   │       └── ensure_fresh_session.dart  # Força refresh do ID token
     │   ├── data/
     │   │   ├── datasources/
     │   │   │   └── firebase_auth_data_source.dart
     │   │   ├── dtos/
     │   │   │   └── user_dto.dart              # fromMap/toMap, toEntity/fromEntity
-    │   │   └── repositories/
-    │   │       └── auth_repository_impl.dart  # Traduz Exception em Failure
+    │   │   ├── repositories/
+    │   │   │   └── auth_repository_impl.dart  # Traduz Exception em Failure
+    │   │   └── security/                      # Implementações de contratos do core
+    │   │       ├── aes_gcm_crypto_service.dart
+    │   │       ├── flutter_secure_storage_adapter.dart
+    │   │       └── local_auth_biometric_authenticator.dart
     │   └── presentation/
     │       ├── controllers/
-    │       │   └── auth_controller.dart       # Invoca casos de uso
+    │       │   └── auth_notifier.dart         # AsyncNotifier + StreamProvider
     │       └── screens/
     │           ├── login_screen.dart
     │           └── register_screen.dart
     │
     ├── transactions/
+    │   ├── providers/
+    │   │   └── transaction_providers.dart     # @Riverpod para repo, datasources, use cases
     │   ├── domain/
     │   │   ├── entities/
-    │   │   │   ├── transaction_entity.dart    # Renomeada para evitar
-    │   │   │   │                              # colisão com cloud_firestore
+    │   │   │   ├── transaction_entity.dart    # Renomeada para evitar colisão
     │   │   │   ├── transaction_type.dart
-    │   │   │   └── transaction_category.dart
+    │   │   │   ├── transaction_category.dart
+    │   │   │   └── transaction_ui_state.dart
     │   │   ├── repositories/
     │   │   │   └── transaction_repository.dart
     │   │   └── usecases/
-    │   │       ├── watch_transactions.dart    # Stream<List<TransactionEntity>>
+    │   │       ├── watch_transactions.dart    # Stream<Either<Failure, List<...>>>
+    │   │       ├── fetch_next_page.dart       # Paginação cursor-based
     │   │       ├── create_transaction.dart
     │   │       ├── update_transaction.dart
     │   │       └── delete_transaction.dart
@@ -192,7 +233,9 @@ lib/
     │   │       └── transaction_repository_impl.dart
     │   └── presentation/
     │       ├── controllers/
-    │       │   └── transaction_controller.dart
+    │       │   └── transaction_notifier.dart  # AsyncNotifier + merge realtime/pagination
+    │       ├── providers/
+    │       │   └── filtered_transactions_provider.dart  # debounceTime + filtro derivado
     │       ├── screens/
     │       │   ├── dashboard_screen.dart
     │       │   ├── transaction_list_screen.dart
@@ -202,6 +245,8 @@ lib/
     │           └── transaction_card.dart
     │
     └── profile/
+        ├── providers/
+        │   └── profile_providers.dart         # @Riverpod do repo e use cases de tema
         ├── domain/
         │   ├── entities/
         │   │   └── app_theme_mode.dart        # Enum de domínio para tema
@@ -217,7 +262,7 @@ lib/
         │       └── theme_repository_impl.dart
         └── presentation/
             ├── controllers/
-            │   └── theme_controller.dart
+            │   └── theme_notifier.dart        # AsyncNotifier de ThemeMode
             └── screens/
                 └── profile_screen.dart
 ```
@@ -332,39 +377,55 @@ flutter pub run flutter_launcher_icons
 
 ## 🔥 Configuração do Firebase
 
-### Regras do Firestore
+### Arquivos versionados
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, create: if request.auth != null && request.auth.uid == userId;
-      allow update, delete: if request.auth != null && request.auth.uid == userId;
-    }
+| Arquivo | Função |
+|---------|--------|
+| `firebase.json` | Aponta para `firestore.rules`, `firestore.indexes.json` e `storage.rules`, permitindo deploy via CLI. |
+| `firestore.rules` | Rules do Firestore com validação de schema (`hasOnly`, tipos, limites de valor e tamanho, imutabilidade de `userId`/`createdAt` em update). |
+| `firestore.indexes.json` | Índice composto `(userId ASC, date DESC)` exigido pelo listener em tempo real de transações. |
+| `storage.rules` | Rules de Storage que isolam comprovantes por `userId`, exigem `image/*` e tamanho máximo de 5 MiB. |
 
-    match /transactions/{transactionId} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == resource.data.userId;
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
-    }
-  }
-}
+### Regras do Firestore (resumo)
+
+- `users/{userId}`: leitura/escrita só pelo próprio usuário; payload
+  validado por `isUserPayload` (`name`, `email`, `balance`,
+  `createdAt`, `avatarUrl?`).
+- `transactions/{id}`: leitura/escrita só pelo dono (`auth.uid ==
+  resource.data.userId`). Em `create`, payload validado por
+  `isTransactionPayload` — bloqueia `amount` inválido, tipo fora do
+  enum, descrição vazia ou maior que 200 caracteres, etc. Em `update`,
+  `userId` e `createdAt` são imutáveis.
+
+### Regras do Storage (resumo)
+
+- `receipts/{userId}/**`: leitura e escrita apenas pelo próprio usuário.
+- Upload bloqueado se `request.resource.size >= 5 MiB` ou
+  `contentType` não corresponder a `image/.*`.
+
+### Deploy via Firebase CLI
+
+```bash
+# Login interativo (uma vez por máquina)
+firebase login
+
+# Seleciona o projeto
+firebase use bytebankapp-3fe6b
+
+# Deploy granular
+firebase deploy --only firestore:rules
+firebase deploy --only firestore:indexes
+firebase deploy --only storage
+
+# Ou tudo de uma vez:
+firebase deploy
 ```
 
-### Regras do Storage
-
-```javascript
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /receipts/{userId}/{receiptId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
-```
+> **Atenção**: o "modo teste" padrão do Firestore/Storage tem expiração
+> em 30 dias (rule `allow read, write: if request.time <
+> timestamp.date(...)`). Se o projeto foi criado em modo teste e
+> nunca recebeu deploy, todas as escritas começam a falhar com
+> `Permission denied` ao expirar. Use os arquivos do repo.
 
 ---
 
@@ -499,11 +560,13 @@ o domínio: `Presentation → Domain ← Data`.
 
 ### 3. Apresentação (`features/<x>/presentation/`)
 
-- **Controllers**: invocam casos de uso e expõem estado observável via
-  `ChangeNotifier`/`Provider`. Não conhecem Firebase nem repositórios
-  diretamente.
-- **Screens e Widgets**: consomem o estado dos controllers e renderizam
-  a UI; nunca chamam casos de uso ou Firebase diretamente.
+- **Notifiers** (Riverpod `AsyncNotifier` / `StreamProvider`): invocam
+  casos de uso e expõem `AsyncValue<UiState>` para a UI consumir via
+  `ref.watch`. Não conhecem Firebase nem repositórios diretamente.
+- **Screens e Widgets**: consomem o estado dos notifiers com `ref.watch`
+  e renderizam a UI; nunca chamam casos de uso ou Firebase diretamente.
+  Efeitos colaterais (navegação, snackbars) usam `ref.listen` sem
+  rebuild.
 
 ### Diagrama de Dependências
 
@@ -516,10 +579,12 @@ Apresentação e Dados dependem do Domínio; o Domínio não depende de ninguém
 
 ### Composition Root
 
-`lib/core/di/dependencies.dart` concentra a montagem das árvores de objetos
-das três features e expõe builders de controllers (`buildAuthController`,
-`buildTransactionController`, `buildThemeController`) consumidos pelo
-`MultiProvider` em `app.dart`.
+Não há DI manual nem `get_it`. Cada feature mantém um arquivo
+`providers/<x>_providers.dart` anotado com `@Riverpod(keepAlive: true)`
+que monta a árvore de objetos da feature (datasources → repositórios →
+casos de uso). Esses providers são consumidos pelos notifiers via
+`ref.watch`. A árvore inteira é instanciada lazily na primeira leitura e
+mantida viva pelo `ProviderScope` em `main.dart`.
 
 ---
 
@@ -548,12 +613,113 @@ das três features e expõe builders de controllers (`buildAuthController`,
 
 ---
 
+## 🧠 Gerenciamento de Estado (Riverpod)
+
+O projeto substitui o `provider`/`ChangeNotifier` da Fase 3 por
+**Riverpod com geração de código**:
+
+- **`@Riverpod(keepAlive: true)`** declara providers para repositórios e
+  casos de uso, substituindo containers de DI tradicionais.
+- **`AsyncNotifier<T>`** controla telas com efeitos colaterais (login,
+  criação de transação). O estado é `AsyncValue<T>` — `loading`,
+  `error` e `data` exaustivos via `.when(...)`.
+- **`StreamProvider<T>`** expõe a stream de autenticação. O notifier de
+  transações abre seu próprio listener Firestore e mescla os snapshots
+  em tempo real com a página corrente.
+- **`ref.watch`** declara dependências reativas entre providers.
+- **`ref.listen`** dispara efeitos colaterais (navegação, refresh do
+  router) sem causar rebuild.
+- **`ref.invalidate(provider)`** força reconstrução — usado no
+  pull-to-refresh do dashboard.
+
+Geração de código (necessária após alterar providers):
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+# ou em modo watch durante o desenvolvimento:
+dart run build_runner watch --delete-conflicting-outputs
+```
+
+---
+
+## 🔄 Programação Reativa
+
+Streams são cidadãos de primeira classe na camada de dados:
+
+- **Firestore reativo**: `TransactionRepository.watchTransactions` retorna
+  `Stream<Either<Failure, List<TransactionEntity>>>` — o snapshot
+  listener do Firestore não é "achatado" em `Future`.
+- **Composição com RxDart**:
+  - `BehaviorSubject<String>` + `debounceTime(300ms)` no campo de busca
+    de transações, para reduzir custo de filtragem.
+  - `startWith('')` para garantir emissão inicial e permitir que o
+    provider derivado renderize imediatamente.
+- **Estados derivados**:
+  `filteredTransactionsProvider` combina o estado do notifier de
+  transações com a query debounced via `ref.watch`, atualizando
+  automaticamente quando qualquer um dos dois muda.
+
+---
+
+## ⚡ Performance
+
+- **Roteamento declarativo**: `go_router` substitui o `Navigator`
+  imperativo, permite redirect guard por estado de autenticação e
+  inicialização preguiçosa das telas.
+- **Paginação cursor-based** no Firestore (`query.limit(N) +
+  startAfterDocument(lastDoc)`) através do caso de uso
+  `FetchNextPage`. O `TransactionNotifier` faz merge entre a página
+  paginada e o stream em tempo real, deduplicando por id.
+- **Persistência offline explícita**:
+  `FirebaseFirestore.instance.settings = Settings(persistenceEnabled: true, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED)`
+  em `main.dart`.
+- **Índice composto Firestore**: declarado em
+  `firestore.indexes.json` (`userId ASC, date DESC`), requerido pelo
+  listener em tempo real. Sem ele a query `.snapshots()` falha com
+  `FAILED_PRECONDITION`.
+- **`precacheImage`** do logo na primeira `didChangeDependencies` do
+  `ByteBankApp`.
+- **`RepaintBoundary`** isolando o card de saldo do dashboard.
+- **`const` agressivo** em widgets folhas; reforçado pelo lint
+  `prefer_const_constructors`.
+- **R8/ProGuard**: `isMinifyEnabled = true` e `isShrinkResources = true`
+  no `android/app/build.gradle.kts` (build release).
+- **Ofuscação de símbolos Dart** disponível via flag
+  `--obfuscate --split-debug-info=build/symbols/` no `flutter build`.
+
+---
+
 ## 🧪 Testes
 
-Para executar os testes:
+A separação de camadas habilita estratégia piramidal:
+
+| Tipo | Onde | Ferramentas |
+|------|------|-------------|
+| Unitário (domínio) | `test/features/<x>/domain/usecases/` | `flutter_test`, `mocktail` |
+| Unitário (data) | `test/features/transactions/data/datasources/` | `flutter_test`, `fake_cloud_firestore` |
+| Controller | `test/features/<x>/presentation/controllers/` | `ProviderContainer.overrideWith*`, `mocktail` |
+
+Cobertura atual inclui:
+
+- Todos os casos de uso de `auth` (`SignIn`, `SignUp`, `SignOut`,
+  `ResetPassword`, `EnsureFreshSession`).
+- Todos os casos de uso de `transactions` (`WatchTransactions`,
+  `CreateTransaction`, `UpdateTransaction`, `DeleteTransaction`,
+  `FetchNextPage`).
+- Casos de uso de tema em `profile`.
+- `FirestoreTransactionDataSource` com `fake_cloud_firestore`.
+- `TransactionNotifier`: inicialização, paginação,
+  `fetchNextPage`, deduplicação por id e gating por
+  `EnsureFreshSession`.
 
 ```bash
 flutter test
+```
+
+Para rodar um teste específico:
+
+```bash
+flutter test test/features/transactions/presentation/controllers/transaction_notifier_test.dart
 ```
 
 ---
