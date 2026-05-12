@@ -1,0 +1,140 @@
+ByteBank App — Fase 4 Tech Challenge (FIAP)
+============================================
+
+REPOSITÓRIO
+-----------
+URL:    https://github.com/vitorsaop/bytebank-App
+Branch: master
+
+Clonar:
+  git clone https://github.com/vitorsaop/bytebank-App.git
+  cd bytebank-App
+
+RESUMO DO PROJETO
+-----------------
+Aplicativo Flutter de gestão financeira pessoal com autenticação Firebase,
+transações em tempo real via Firestore, paginação cursor-based, modo escuro,
+bloqueio biométrico por inatividade e arquitetura limpa (Clean Architecture).
+
+STACK TECNOLÓGICA
+-----------------
+- Flutter 3.x / Dart 3.x
+- Firebase (Auth, Firestore, App Check)
+- Riverpod 2.x (code-gen com @riverpod / @Riverpod)
+- go_router ^14 (roteamento reativo com guard de autenticação)
+- rxdart ^0.28 (debounce de busca com BehaviorSubject)
+- fpdart ^1.1 (Either<Failure, T> para tratamento de erros)
+- flutter_secure_storage (armazenamento seguro de tokens)
+- local_auth (autenticação biométrica)
+
+PRINCIPAIS FUNCIONALIDADES IMPLEMENTADAS NA FASE 4
+---------------------------------------------------
+1. Migração completa para Riverpod 2.x com code generation
+   - AsyncNotifier para auth e transações
+   - StreamProvider para estado de autenticação reativo
+   - keepAlive em providers de longa duração
+
+2. Roteamento com go_router
+   - Tela de splash como rota inicial
+   - Guard reativo: redireciona automaticamente ao mudar estado de auth
+   - GoRouterRefreshNotifier integrado ao authNotifierProvider
+
+3. Paginação cursor-based no Firestore
+   - watchTransactions: stream em tempo real da primeira página (20 items)
+   - fetchNextPage: carrega próxima página sem sobrescrever itens paginados
+   - Merge inteligente: realtime atualiza cabeça da lista, tail paginado preservado
+   - Deduplicação por ID para evitar itens duplicados
+
+4. Busca com debounce via rxdart
+   - BehaviorSubject + debounceTime(300ms)
+   - filteredTransactionsProvider derivado (não afeta cursor de paginação)
+
+5. Bloqueio de sessão por ciclo de vida
+   - WidgetsBindingObserver: bloqueia em paused/hidden
+   - SessionLockNotifier com biometria para desbloquear
+   - Botão "Sair" na tela de bloqueio para logout completo
+
+6. Segurança de sessão
+   - EnsureFreshSession executado antes de create/update/delete
+   - Regras Firestore atualizadas (imutabilidade de createdAt)
+
+7. Testes automatizados
+   - 37 testes unitários (domínio + datasource + notifier)
+   - transaction_notifier_test: 8 testes cobrindo paginação, dedup, EnsureFreshSession
+   - firestore_transaction_data_source_test: cursor pagination, ordenação
+   - fetch_next_page_test, watch_transactions_test, domain use cases
+
+CONFIGURAÇÃO E EXECUÇÃO
+-----------------------
+Pré-requisitos:
+  - Flutter SDK >= 3.0.0
+  - Dart >= 3.0.0
+  - Firebase CLI + flutterfire_cli
+  - Conta Firebase com projeto configurado
+
+Passos:
+
+1. Instalar dependências:
+     flutter pub get
+
+2. Gerar código Riverpod / JSON serialization:
+     dart run build_runner build --delete-conflicting-outputs
+
+3. Configurar Firebase (gera lib/firebase_options.dart):
+     dart pub global activate flutterfire_cli
+     flutterfire configure
+
+4. Deploy das regras Firestore:
+     firebase deploy --only firestore:rules,storage
+
+5. Executar testes:
+     flutter test
+
+6. Analisar código:
+     flutter analyze
+
+7. Rodar o app:
+     flutter run
+
+BUILD DE RELEASE
+----------------
+Android:
+  flutter build apk --release --obfuscate --split-debug-info=build/debug-info
+
+iOS:
+  flutter build ios --release --obfuscate --split-debug-info=build/debug-info
+
+ESTRUTURA DO PROJETO
+--------------------
+lib/
+├── main.dart                    # Firebase init + App Check
+├── app.dart                     # Root widget + bloqueio biométrico
+├── core/
+│   ├── error/                   # Hierarquia de Failure (sealed class)
+│   ├── providers/               # Core providers (biometria, etc.)
+│   ├── router/                  # app_router.dart (go_router)
+│   ├── security/                # SessionLockNotifier, EnsureFreshSession
+│   ├── theme/                   # AppTheme (light/dark)
+│   ├── utils/                   # AppConstants, formatters, secure_logger
+│   └── widgets/                 # SplashScreen, componentes compartilhados
+└── features/
+    ├── auth/                    # Login, cadastro, AuthNotifier
+    ├── transactions/            # CRUD, paginação, busca, TransactionNotifier
+    └── profile/                 # Perfil, tema, ThemeNotifier
+
+test/
+├── features/auth/
+├── features/transactions/
+│   ├── data/datasources/        # firestore_transaction_data_source_test
+│   ├── domain/usecases/         # fetch_next_page_test, watch_transactions_test
+│   └── presentation/controllers/ # transaction_notifier_test
+└── features/profile/
+
+OBSERVAÇÕES PARA AVALIAÇÃO
+---------------------------
+- firebase_options.dart NÃO está no repositório (segurança). Deve ser gerado
+  localmente via `flutterfire configure` apontando para o projeto Firebase do avaliador.
+- As regras de segurança Firestore estão em firestore.rules na raiz do projeto.
+- Todos os testes passam sem necessidade de Firebase real (usa fake_cloud_firestore).
+- O app suporta tema claro e escuro configurável por usuário.
+- Locale pt_BR em todos os formatadores de data e moeda.
