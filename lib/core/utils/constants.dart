@@ -25,4 +25,7 @@ class AppConstants {
 
   /// Versão atual da aplicação, exibida na tela de perfil.
   static const String appVersion = '1.0.0';
+
+  /// Tamanho da página usada nas consultas paginadas de transações.
+  static const int transactionsPageSize = 20;
 }

@@ -1,130 +1,82 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:bytebank_app/core/router/app_router.dart';
+import 'package:bytebank_app/core/security/session_lock_notifier.dart';
+import 'package:bytebank_app/core/theme/app_theme.dart';
+import 'package:bytebank_app/features/auth/presentation/controllers/auth_notifier.dart';
+import 'package:bytebank_app/features/profile/presentation/controllers/theme_notifier.dart';
 
-import 'core/di/dependencies.dart';
-import 'core/security/biometric_authenticator.dart';
-import 'core/security/session_lock_controller.dart';
-import 'core/theme/app_theme.dart';
-import 'core/widgets/loading_indicator.dart';
-import 'features/auth/presentation/controllers/auth_controller.dart';
-import 'features/auth/presentation/screens/login_screen.dart';
-import 'features/profile/presentation/controllers/theme_controller.dart';
-import 'features/transactions/presentation/controllers/transaction_controller.dart';
-import 'features/transactions/presentation/screens/dashboard_screen.dart';
-
-/// Widget raiz da aplicação.
-///
-/// Constrói os controllers da camada de apresentação a partir de
-/// [AppDependencies] (composition root) e os disponibiliza para a árvore
-/// via `MultiProvider`. A escolha do tema reage ao [ThemeController] e
-/// a tela inicial é determinada pela [_AuthGate], que observa o
-/// [AuthController]. Quando o usuário tem biometria habilitada, o
-/// [SessionLockController] interpõe uma tela de bloqueio enquanto a
-/// identidade não for reconfirmada.
-class ByteBankApp extends StatelessWidget {
-  /// Cria a [ByteBankApp] usando uma instância nova de [AppDependencies].
-  ByteBankApp({super.key}) : _dependencies = AppDependencies();
-
-  final AppDependencies _dependencies;
+class ByteBankApp extends ConsumerStatefulWidget {
+  const ByteBankApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<ThemeController>(
-          create: (_) => _dependencies.buildThemeController(),
-        ),
-        ChangeNotifierProvider<AuthController>(
-          create: (_) => _dependencies.buildAuthController(),
-        ),
-        ChangeNotifierProvider<TransactionController>(
-          create: (_) => _dependencies.buildTransactionController(),
-        ),
-        ChangeNotifierProvider<SessionLockController>.value(
-          value: _dependencies.sessionLockController..attach(),
-        ),
-        Provider<BiometricAuthenticator>.value(
-          value: _dependencies.biometricAuthenticator,
-        ),
-      ],
-      child: Consumer<ThemeController>(
-        builder: (context, themeController, _) => MaterialApp(
-          title: 'ByteBank',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light,
-          darkTheme: AppTheme.dark,
-          themeMode: themeController.themeMode,
-          home: const _AuthGate(),
-        ),
-      ),
-    );
+  ConsumerState<ByteBankApp> createState() => _ByteBankAppState();
+}
+
+class _ByteBankAppState extends ConsumerState<ByteBankApp>
+    with WidgetsBindingObserver {
+  bool _logoPrecached = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
-}
-
-/// Componente que decide qual tela exibir conforme o
-/// [AuthController.status] e o [SessionLockController.state].
-class _AuthGate extends StatefulWidget {
-  const _AuthGate();
 
   @override
-  State<_AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<_AuthGate> {
-  AuthStatus? _previousAuthStatus;
-
-  @override
-  Widget build(BuildContext context) {
-    final authController = context.watch<AuthController>();
-    final lockController = context.watch<SessionLockController>();
-
-    _syncSessionLock(authController.status, lockController);
-
-    switch (authController.status) {
-      case AuthStatus.initial:
-      case AuthStatus.loading:
-        return const Scaffold(
-          body: LoadingIndicator(message: 'Carregando...'),
-        );
-      case AuthStatus.authenticated:
-        if (!lockController.isUnlocked) {
-          return _BiometricLockScreen(controller: lockController);
-        }
-        return const DashboardScreen();
-      case AuthStatus.unauthenticated:
-      case AuthStatus.error:
-        return const LoginScreen();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_logoPrecached) {
+      precacheImage(const AssetImage('assets/images/logo.png'), context);
+      _logoPrecached = true;
     }
   }
 
-  void _syncSessionLock(
-    AuthStatus status,
-    SessionLockController lockController,
-  ) {
-    if (_previousAuthStatus == status) return;
-    final previous = _previousAuthStatus;
-    _previousAuthStatus = status;
-    final authenticated = status == AuthStatus.authenticated;
-    final freshSignIn = previous == AuthStatus.unauthenticated ||
-        previous == AuthStatus.error;
-    Future.microtask(
-      () => lockController.refresh(
-        hasAuthenticatedSession: authenticated,
-        freshSignIn: freshSignIn,
-      ),
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      ref.read(sessionLockNotifierProvider.notifier).lock();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeMode =
+        ref.watch(themeNotifierProvider).valueOrNull ?? ThemeMode.system;
+    final isLocked = ref.watch(sessionLockNotifierProvider);
+
+    if (isLocked) {
+      return MaterialApp(
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode,
+        debugShowCheckedModeBanner: false,
+        home: const _BiometricLockScreen(),
+      );
+    }
+
+    return MaterialApp.router(
+      routerConfig: ref.watch(appRouterProvider),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-/// Tela apresentada quando a sessão está autenticada mas a biometria
-/// ainda não foi confirmada nesta abertura do app.
-class _BiometricLockScreen extends StatelessWidget {
-  const _BiometricLockScreen({required this.controller});
-
-  final SessionLockController controller;
+class _BiometricLockScreen extends ConsumerWidget {
+  const _BiometricLockScreen();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -147,9 +99,21 @@ class _BiometricLockScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: () => controller.unlock(),
+                  onPressed: () =>
+                      ref.read(sessionLockNotifierProvider.notifier).unlock(),
                   icon: const Icon(Icons.lock_open),
                   label: const Text('Desbloquear'),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () async {
+                    await ref
+                        .read(authNotifierProvider.notifier)
+                        .signOut();
+                    ref.read(sessionLockNotifierProvider.notifier).forceUnlock();
+                  },
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sair'),
                 ),
               ],
             ),

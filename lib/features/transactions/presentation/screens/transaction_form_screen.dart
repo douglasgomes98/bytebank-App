@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/validators.dart';
@@ -10,28 +12,22 @@ import '../../../../core/widgets/custom_button.dart';
 import '../../domain/entities/transaction_category.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../domain/entities/transaction_type.dart';
-import '../controllers/transaction_controller.dart';
+import '../controllers/transaction_notifier.dart';
 
-/// Tela de criação ou edição de uma [TransactionEntity].
-///
-/// Quando [transaction] é informada, a tela entra em modo de edição e
-/// preenche os campos com os valores existentes; caso contrário, opera
-/// como formulário de criação.
-class TransactionFormScreen extends StatefulWidget {
-  /// Transação que será editada. Quando `null`, a tela cria uma nova.
+class TransactionFormScreen extends ConsumerStatefulWidget {
   final TransactionEntity? transaction;
 
-  /// Cria a [TransactionFormScreen].
   const TransactionFormScreen({super.key, this.transaction});
 
-  /// `true` quando a tela está em modo de edição.
   bool get isEditing => transaction != null;
 
   @override
-  State<TransactionFormScreen> createState() => _TransactionFormScreenState();
+  ConsumerState<TransactionFormScreen> createState() =>
+      _TransactionFormScreenState();
 }
 
-class _TransactionFormScreenState extends State<TransactionFormScreen> {
+class _TransactionFormScreenState
+    extends ConsumerState<TransactionFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   final _amountController = TextEditingController();
@@ -63,8 +59,6 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     super.dispose();
   }
 
-  /// Permite ao usuário selecionar uma imagem da galeria como
-  /// comprovante.
   Future<void> _pickReceipt() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
@@ -76,7 +70,6 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     }
   }
 
-  /// Apresenta o seletor de data e atualiza [_selectedDate].
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -87,19 +80,15 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  /// Valida o formulário e dispara o caso de uso correspondente
-  /// (criação ou atualização).
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
 
-    final controller = context.read<TransactionController>();
     final amount = Formatters.parseAmount(_amountController.text);
-    bool success;
+    final notifier = ref.read(transactionNotifierProvider.notifier);
 
     if (widget.isEditing) {
-      success = await controller.updateTransactionEntry(
+      await notifier.updateTransaction(
         widget.transaction!.copyWith(
           description: _descriptionController.text.trim(),
           amount: amount,
@@ -110,36 +99,28 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
               ? null
               : _notesController.text.trim(),
         ),
-        newReceiptFile: _receiptFile,
       );
     } else {
-      success = await controller.addTransaction(
-        description: _descriptionController.text.trim(),
-        amount: amount,
-        type: _selectedType,
-        category: _selectedCategory,
-        date: _selectedDate,
-        receiptFile: _receiptFile,
-        notes: _notesController.text.trim().isEmpty
-            ? null
-            : _notesController.text.trim(),
+      await notifier.createTransaction(
+        TransactionEntity(
+          id: const Uuid().v4(),
+          userId: '',
+          description: _descriptionController.text.trim(),
+          amount: amount,
+          type: _selectedType,
+          category: _selectedCategory,
+          date: _selectedDate,
+          notes: _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
+          createdAt: DateTime.now(),
+        ),
       );
     }
 
     if (mounted) {
       setState(() => _isLoading = false);
-      if (success) {
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              controller.errorMessage ?? 'Erro ao salvar transação',
-            ),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      context.pop();
     }
   }
 
@@ -147,8 +128,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            Text(widget.isEditing ? 'Editar transação' : 'Nova transação'),
+        title: Text(widget.isEditing ? 'Editar transação' : 'Nova transação'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -157,10 +137,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Tipo',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
+              Text('Tipo', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 8),
               SegmentedButton<TransactionType>(
                 selected: {_selectedType},
@@ -270,13 +247,11 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                       top: 8,
                       right: 8,
                       child: IconButton(
-                        icon:
-                            const Icon(Icons.close, color: Colors.white),
+                        icon: const Icon(Icons.close, color: Colors.white),
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.black54,
                         ),
-                        onPressed: () =>
-                            setState(() => _receiptFile = null),
+                        onPressed: () => setState(() => _receiptFile = null),
                       ),
                     ),
                   ],
@@ -295,8 +270,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                 ),
               const SizedBox(height: 32),
               CustomButton(
-                label:
-                    widget.isEditing ? 'Salvar alterações' : 'Adicionar',
+                label: widget.isEditing ? 'Salvar alterações' : 'Adicionar',
                 onPressed: _submit,
                 isLoading: _isLoading,
               ),

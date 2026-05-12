@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
   cupertino_icons: ^1.0.8
 
   # Firebase
@@ -21,7 +20,11 @@ dependencies:
   firebase_app_check: ^0.3.2
 
   # State Management
-  provider: ^6.1.2
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.6.1
 
   # UI & Charts
   fl_chart: ^0.70.2
@@ -37,8 +40,11 @@ dependencies:
   path_provider: ^2.1.5
   shared_preferences: ^2.3.5
 
-  # Functional types (Either/Failure contract used by the domain layer)
+  # Functional types
   fpdart: ^1.1.0
+
+  # Reactive operators
+  rxdart: ^0.28.0
 
   # Security
   flutter_secure_storage: ^9.2.2
@@ -50,6 +56,10 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.1
+  riverpod_generator: ^2.4.3
+  build_runner: ^2.4.13
+  mocktail: ^1.0.4
+  fake_cloud_firestore: ^3.0.3
 
 flutter_launcher_icons:
   android: true

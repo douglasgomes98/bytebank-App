@@ -17,20 +17,52 @@ class FirestoreTransactionDataSource {
   FirestoreTransactionDataSource({FirebaseFirestore? firestore})
       : _db = firestore ?? FirebaseFirestore.instance;
 
-  /// Stream que reflete em tempo real a coleção de transações do
-  /// usuário [userId]. A ordenação por data decrescente é feita em Dart
-  /// para evitar a necessidade de um índice composto no Firestore,
-  /// preservando o comportamento da implementação anterior.
-  Stream<List<TransactionDto>> watchTransactions(String userId) {
+  Stream<List<TransactionDto>> watchTransactions(
+    String userId, {
+    int limit = AppConstants.transactionsPageSize,
+  }) {
     return _db
         .collection(AppConstants.transactionsCollection)
         .where('userId', isEqualTo: userId)
+        .orderBy('date', descending: true)
+        .limit(limit)
         .snapshots()
-        .map((snapshot) {
-      final list = snapshot.docs.map(TransactionDto.fromFirestore).toList();
-      list.sort((a, b) => b.date.compareTo(a.date));
-      return list;
-    });
+        .map((snapshot) =>
+            snapshot.docs.map(TransactionDto.fromFirestore).toList());
+  }
+
+  Future<List<TransactionDto>> fetchPage(
+    String userId, {
+    int limit = AppConstants.transactionsPageSize,
+    DocumentSnapshot? startAfter,
+  }) async {
+    try {
+      Query<Map<String, dynamic>> query = _db
+          .collection(AppConstants.transactionsCollection)
+          .where('userId', isEqualTo: userId)
+          .orderBy('date', descending: true);
+
+      if (startAfter != null) {
+        query = query.startAfterDocument(startAfter);
+      }
+
+      final snapshot = await query.limit(limit).get();
+      return snapshot.docs.map(TransactionDto.fromFirestore).toList();
+    } on FirebaseException catch (e) {
+      throw ServerException(e.message ?? 'Erro ao buscar transações', code: e.code);
+    }
+  }
+
+  Future<DocumentSnapshot?> getDocumentSnapshot(String transactionId) async {
+    try {
+      final doc = await _db
+          .collection(AppConstants.transactionsCollection)
+          .doc(transactionId)
+          .get();
+      return doc.exists ? doc : null;
+    } on FirebaseException catch (e) {
+      throw ServerException(e.message ?? 'Erro ao buscar documento', code: e.code);
+    }
   }
 
   /// Persiste [dto] como um novo documento e retorna o DTO atualizado

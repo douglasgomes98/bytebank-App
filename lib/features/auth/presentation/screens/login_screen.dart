@@ -1,25 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/custom_button.dart';
-import '../controllers/auth_controller.dart';
-import 'register_screen.dart';
+import '../controllers/auth_notifier.dart';
 
-/// Tela de login da aplicação.
-///
-/// Consome o [AuthController] via [Provider] para autenticar o usuário e
-/// reage aos estados [AuthStatus.loading] / [AuthStatus.error] expostos
-/// pelo controller.
-class LoginScreen extends StatefulWidget {
-  /// Cria a [LoginScreen].
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -32,31 +26,29 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// Valida o formulário e dispara o caso de uso de login via
-  /// [AuthController.signIn].
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final auth = context.read<AuthController>();
-    final success = await auth.signIn(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    await ref.read(authNotifierProvider.notifier).signIn(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (!mounted) return;
+    final authState = ref.read(authNotifierProvider);
+    authState.whenOrNull(
+      error: (e, _) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(auth.errorMessage ?? 'Erro ao entrar'),
+          content: Text(e.toString()),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
-      );
-    }
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLoading =
-        context.watch<AuthController>().status == AuthStatus.loading;
+    final isLoading = ref.watch(authNotifierProvider).isLoading;
 
     return Scaffold(
       body: SafeArea(
@@ -71,8 +63,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   'assets/images/logo.png',
                   height: 120,
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback exibido quando o logo não está disponível
-                    // (ex.: durante uma renderização no devtool).
                     return const Text(
                       'ByteBank',
                       style: TextStyle(
@@ -160,12 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const Text('Não tem uma conta?'),
                   TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const RegisterScreen(),
-                      ),
-                    ),
+                    onPressed: () => context.push('/register'),
                     child: const Text('Cadastre-se'),
                   ),
                 ],
@@ -177,8 +162,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  /// Apresenta o diálogo de redefinição de senha e dispara o caso de uso
-  /// correspondente via [AuthController.resetPassword].
   void _showResetPasswordDialog() {
     final emailCtrl = TextEditingController();
     showDialog(
@@ -197,8 +180,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await context
-                  .read<AuthController>()
+              await ref
+                  .read(authNotifierProvider.notifier)
                   .resetPassword(emailCtrl.text.trim());
               if (ctx.mounted) {
                 Navigator.pop(ctx);

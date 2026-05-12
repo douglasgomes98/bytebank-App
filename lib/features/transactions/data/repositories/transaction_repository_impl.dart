@@ -1,27 +1,23 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:fpdart/fpdart.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/utils/constants.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../datasources/firebase_storage_data_source.dart';
 import '../datasources/firestore_transaction_data_source.dart';
 import '../dtos/transaction_dto.dart';
 
-/// Implementação concreta de [TransactionRepository].
-///
-/// Coordena [FirestoreTransactionDataSource] (persistência) e
-/// [FirebaseStorageDataSource] (comprovantes) e traduz exceções em
-/// valores [Failure].
 class TransactionRepositoryImpl implements TransactionRepository {
   final FirestoreTransactionDataSource _firestoreDataSource;
   final FirebaseStorageDataSource _storageDataSource;
   final Uuid _uuid;
 
-  /// Cria um [TransactionRepositoryImpl].
   TransactionRepositoryImpl({
     required FirestoreTransactionDataSource firestoreDataSource,
     required FirebaseStorageDataSource storageDataSource,
@@ -31,14 +27,46 @@ class TransactionRepositoryImpl implements TransactionRepository {
         _uuid = uuid ?? const Uuid();
 
   @override
-  Stream<List<TransactionEntity>> watchTransactions(String userId) {
-    return _firestoreDataSource.watchTransactions(userId).map(
-          (list) => list.map((dto) => dto.toEntity()).toList(growable: false),
-        );
+  Stream<Either<Failure, List<TransactionEntity>>> watchTransactions(
+    String userId, {
+    int limit = AppConstants.transactionsPageSize,
+  }) {
+    return _firestoreDataSource
+        .watchTransactions(userId, limit: limit)
+        .map<Either<Failure, List<TransactionEntity>>>(
+          (list) =>
+              Right(list.map((dto) => dto.toEntity()).toList(growable: false)),
+        )
+        .handleError((e) => Left<Failure, List<TransactionEntity>>(
+              ServerFailure(e.toString()),
+            ));
   }
 
   @override
-  Future<Either<Failure, TransactionEntity>> createTransaction({
+  Future<Either<Failure, List<TransactionEntity>>> fetchNextPage({
+    required String userId,
+    required String? lastTransactionId,
+    int limit = AppConstants.transactionsPageSize,
+  }) async {
+    try {
+      DocumentSnapshot? startAfter;
+      if (lastTransactionId != null) {
+        startAfter =
+            await _firestoreDataSource.getDocumentSnapshot(lastTransactionId);
+      }
+      final dtos = await _firestoreDataSource.fetchPage(
+        userId,
+        limit: limit,
+        startAfter: startAfter,
+      );
+      return Right(dtos.map((dto) => dto.toEntity()).toList(growable: false));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message, code: e.code));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Unit>> createTransaction({
     required TransactionEntity transaction,
     File? receiptFile,
   }) async {
@@ -57,9 +85,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
         createdAt: transaction.createdAt,
       );
 
-      final dto = await _firestoreDataSource
-          .create(TransactionDto.fromEntity(toPersist));
-      return Right(dto.toEntity());
+      await _firestoreDataSource.create(TransactionDto.fromEntity(toPersist));
+      return const Right(unit);
     } on StorageException catch (e) {
       return Left(StorageFailure(e.message));
     } on ServerException catch (e) {
@@ -68,7 +95,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
   }
 
   @override
-  Future<Either<Failure, TransactionEntity>> updateTransaction({
+  Future<Either<Failure, Unit>> updateTransaction({
     required TransactionEntity transaction,
     File? newReceiptFile,
   }) async {
@@ -86,7 +113,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
 
       final updated = transaction.copyWith(receiptUrl: receiptUrl);
       await _firestoreDataSource.update(TransactionDto.fromEntity(updated));
-      return Right(updated);
+      return const Right(unit);
     } on StorageException catch (e) {
       return Left(StorageFailure(e.message));
     } on ServerException catch (e) {
@@ -95,14 +122,11 @@ class TransactionRepositoryImpl implements TransactionRepository {
   }
 
   @override
-  Future<Either<Failure, Unit>> deleteTransaction(
-    TransactionEntity transaction,
-  ) async {
+  Future<Either<Failure, Unit>> deleteTransaction({
+    required String transactionId,
+  }) async {
     try {
-      if (transaction.receiptUrl != null) {
-        await _storageDataSource.deleteReceipt(transaction.receiptUrl!);
-      }
-      await _firestoreDataSource.delete(transaction.id);
+      await _firestoreDataSource.delete(transactionId);
       return const Right(unit);
     } on StorageException catch (e) {
       return Left(StorageFailure(e.message));

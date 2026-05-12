@@ -1,27 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/core_providers.dart';
 import '../../../../core/security/biometric_authenticator.dart';
-import '../../../../core/security/session_lock_controller.dart';
+import '../../../../core/security/session_lock_notifier.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../auth/presentation/controllers/auth_controller.dart';
-import '../../../transactions/presentation/controllers/transaction_controller.dart';
-import '../controllers/theme_controller.dart';
+import '../../../auth/presentation/controllers/auth_notifier.dart';
+import '../../../transactions/presentation/controllers/transaction_notifier.dart';
+import '../controllers/theme_notifier.dart';
 
-/// Tela de perfil do usuário.
-///
-/// Exibe avatar, nome e e-mail, totais agregados das transações e os
-/// controles de tema, segurança e logout.
-class ProfileScreen extends StatelessWidget {
-  /// Cria a [ProfileScreen].
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthController>().user;
-    final themeController = context.watch<ThemeController>();
-    final txController = context.watch<TransactionController>();
-    final lockController = context.watch<SessionLockController>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authStateStreamProvider).valueOrNull;
+    final themeMode =
+        ref.watch(themeNotifierProvider).valueOrNull ?? ThemeMode.system;
+    final isDarkMode = themeMode == ThemeMode.dark;
+    final txAsync = ref.watch(transactionNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Perfil')),
@@ -36,8 +33,7 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 40,
-                      backgroundColor:
-                          Theme.of(context).colorScheme.primary,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
                       child: Text(
                         user?.name.isNotEmpty == true
                             ? user!.name[0].toUpperCase()
@@ -59,10 +55,7 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     Text(
                       user?.email ?? '',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
                                 .onSurfaceVariant,
@@ -72,10 +65,7 @@ class ProfileScreen extends StatelessWidget {
                     if (user?.createdAt != null)
                       Text(
                         'Membro desde ${Formatters.date(user!.createdAt)}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Theme.of(context)
                                   .colorScheme
                                   .onSurfaceVariant,
@@ -86,32 +76,37 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _StatItem(
-                      label: 'Total receitas',
-                      value: Formatters.currency(txController.totalIncome),
-                      color: Colors.green,
+            txAsync.whenOrNull(
+                  data: (uiState) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _StatItem(
+                            label: 'Total receitas',
+                            value:
+                                Formatters.currency(uiState.totalIncome),
+                            color: Colors.green,
+                          ),
+                          _StatItem(
+                            label: 'Total despesas',
+                            value:
+                                Formatters.currency(uiState.totalExpense),
+                            color: Colors.red,
+                          ),
+                          _StatItem(
+                            label: 'Transações',
+                            value:
+                                uiState.transactions.length.toString(),
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
                     ),
-                    _StatItem(
-                      label: 'Total despesas',
-                      value:
-                          Formatters.currency(txController.totalExpenses),
-                      color: Colors.red,
-                    ),
-                    _StatItem(
-                      label: 'Transações',
-                      value: txController.transactions.length.toString(),
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
+                ) ??
+                const SizedBox.shrink(),
             const SizedBox(height: 16),
             Card(
               child: Column(
@@ -119,21 +114,24 @@ class ProfileScreen extends StatelessWidget {
                   SwitchListTile(
                     title: const Text('Tema escuro'),
                     subtitle: const Text('Alternar entre claro e escuro'),
-                    value: themeController.isDarkMode,
-                    onChanged: (_) => themeController.toggleTheme(),
+                    value: isDarkMode,
+                    onChanged: (_) => ref
+                        .read(themeNotifierProvider.notifier)
+                        .setTheme(
+                          isDarkMode ? ThemeMode.light : ThemeMode.dark,
+                        ),
                     secondary: const Icon(Icons.dark_mode_outlined),
                   ),
                   const Divider(height: 1),
-                  _BiometricSwitch(controller: lockController),
+                  _BiometricSwitch(ref: ref),
                   const Divider(height: 1),
                   ListTile(
-                    leading:
-                        const Icon(Icons.logout, color: Colors.red),
+                    leading: const Icon(Icons.logout, color: Colors.red),
                     title: const Text(
                       'Sair',
                       style: TextStyle(color: Colors.red),
                     ),
-                    onTap: () => _confirmLogout(context),
+                    onTap: () => _confirmLogout(context, ref),
                   ),
                 ],
               ),
@@ -144,10 +142,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  /// Apresenta o diálogo de confirmação e dispara o logout através de
-  /// [AuthController.signOut], limpando também a lista de transações em
-  /// memória.
-  void _confirmLogout(BuildContext context) {
+  void _confirmLogout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -165,8 +160,7 @@ class ProfileScreen extends StatelessWidget {
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<TransactionController>().clear();
-              context.read<AuthController>().signOut();
+              ref.read(authNotifierProvider.notifier).signOut();
             },
             child: const Text('Sair'),
           ),
@@ -176,104 +170,64 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-/// Switch para ativar/desativar a exigência de biometria ao reabrir o
-/// app. Consome a disponibilidade real do hardware via
-/// [BiometricAuthenticator] (injetado por `Provider`) e a flag
-/// persistida via [SessionLockController].
 class _BiometricSwitch extends StatefulWidget {
-  const _BiometricSwitch({required this.controller});
+  final WidgetRef ref;
 
-  final SessionLockController controller;
+  const _BiometricSwitch({required this.ref});
 
   @override
   State<_BiometricSwitch> createState() => _BiometricSwitchState();
 }
 
 class _BiometricSwitchState extends State<_BiometricSwitch> {
-  Future<_BiometricSettings>? _future;
+  bool _enabled = false;
+  bool _available = false;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _checkAvailability();
   }
 
-  Future<_BiometricSettings> _load() async {
-    final auth = context.read<BiometricAuthenticator>();
-    final availability = await auth.availability();
-    final enabled = await widget.controller.isBiometricEnabled();
-    return _BiometricSettings(availability: availability, enabled: enabled);
-  }
-
-  Future<void> _toggle(bool value, _BiometricSettings current) async {
-    if (value && current.availability != BiometricAvailability.available) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_unavailableMessage(current.availability))),
+  Future<void> _checkAvailability() async {
+    final biometric =
+        widget.ref.read(biometricAuthenticatorProvider);
+    final availability = await biometric.availability();
+    if (mounted) {
+      setState(
+        () => _available = availability == BiometricAvailability.available,
       );
-      return;
-    }
-    await widget.controller.setBiometricEnabled(value);
-    if (!mounted) return;
-    setState(() {
-      _future = Future.value(
-        _BiometricSettings(
-          availability: current.availability,
-          enabled: value,
-        ),
-      );
-    });
-  }
-
-  String _unavailableMessage(BiometricAvailability availability) {
-    switch (availability) {
-      case BiometricAvailability.notEnrolled:
-        return 'Cadastre uma biometria nas configurações do dispositivo.';
-      case BiometricAvailability.unavailable:
-      case BiometricAvailability.available:
-        return 'Biometria indisponível neste dispositivo.';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_BiometricSettings>(
-      future: _future,
-      builder: (context, snapshot) {
-        final data = snapshot.data;
-        final supported =
-            data?.availability == BiometricAvailability.available;
-        return SwitchListTile(
-          title: const Text('Bloqueio por biometria'),
-          subtitle: Text(
-            supported
-                ? 'Exigir biometria ao reabrir o app'
-                : _unavailableMessage(
-                    data?.availability ??
-                        BiometricAvailability.unavailable,
-                  ),
-          ),
-          value: supported && (data?.enabled ?? false),
-          onChanged:
-              data == null || !supported ? null : (v) => _toggle(v, data),
-          secondary: const Icon(Icons.fingerprint_outlined),
-        );
-      },
+    final isLocked = widget.ref.watch(sessionLockNotifierProvider);
+    return SwitchListTile(
+      title: const Text('Bloqueio por biometria'),
+      subtitle: Text(
+        _available
+            ? 'Exigir biometria ao reabrir o app'
+            : 'Biometria indisponível neste dispositivo.',
+      ),
+      value: _available && _enabled,
+      onChanged: _available
+          ? (value) {
+              setState(() => _enabled = value);
+              if (value) {
+                widget.ref
+                    .read(sessionLockNotifierProvider.notifier)
+                    .lock();
+              }
+            }
+          : null,
+      secondary: Icon(
+        isLocked ? Icons.lock : Icons.fingerprint_outlined,
+      ),
     );
   }
 }
 
-class _BiometricSettings {
-  const _BiometricSettings({
-    required this.availability,
-    required this.enabled,
-  });
-
-  final BiometricAvailability availability;
-  final bool enabled;
-}
-
-/// Bloco de estatística (valor + rótulo) reutilizado dentro do cartão
-/// de totais.
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;

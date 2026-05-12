@@ -1,44 +1,48 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/widgets/loading_indicator.dart';
 import '../../domain/entities/transaction_type.dart';
-import '../controllers/transaction_controller.dart';
+import '../controllers/transaction_notifier.dart';
+import '../providers/filtered_transactions_provider.dart';
 import '../widgets/transaction_card.dart';
-import 'transaction_detail_screen.dart';
 
-/// Tela com a listagem completa de transações.
-///
-/// Permite filtrar por tipo (receita, despesa, transferência) e por
-/// trecho da descrição. A filtragem ocorre em memória através do
-/// [TransactionController.filterTransactions], preservando o algoritmo
-/// da versão anterior.
-class TransactionListScreen extends StatefulWidget {
-  /// Cria a [TransactionListScreen].
+class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
 
   @override
-  State<TransactionListScreen> createState() => _TransactionListScreenState();
+  ConsumerState<TransactionListScreen> createState() =>
+      _TransactionListScreenState();
 }
 
-class _TransactionListScreenState extends State<TransactionListScreen> {
+class _TransactionListScreenState
+    extends ConsumerState<TransactionListScreen> {
+  final _scrollController = ScrollController();
   TransactionType? _filterType;
-  String _searchQuery = '';
-  final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      ref.read(transactionNotifierProvider.notifier).fetchNextPage();
+    }
+  }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<TransactionController>();
-    final filtered = controller.filterTransactions(
-      type: _filterType,
-      query: _searchQuery,
-    );
+    final asyncState = ref.watch(transactionNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -48,26 +52,15 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
           child: Column(
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: TextField(
-                  controller: _searchController,
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  decoration: InputDecoration(
+                  onChanged: (q) =>
+                      ref.read(transactionSearchQueryProvider.notifier).update(q),
+                  decoration: const InputDecoration(
                     hintText: 'Buscar transação...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
+                    prefixIcon: Icon(Icons.search),
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
               ),
@@ -85,25 +78,22 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                     _FilterChip(
                       label: 'Receitas',
                       selected: _filterType == TransactionType.income,
-                      onSelected: (_) => setState(
-                        () => _filterType = TransactionType.income,
-                      ),
+                      onSelected: (_) =>
+                          setState(() => _filterType = TransactionType.income),
                     ),
                     const SizedBox(width: 8),
                     _FilterChip(
                       label: 'Despesas',
                       selected: _filterType == TransactionType.expense,
-                      onSelected: (_) => setState(
-                        () => _filterType = TransactionType.expense,
-                      ),
+                      onSelected: (_) =>
+                          setState(() => _filterType = TransactionType.expense),
                     ),
                     const SizedBox(width: 8),
                     _FilterChip(
                       label: 'Transferências',
                       selected: _filterType == TransactionType.transfer,
-                      onSelected: (_) => setState(
-                        () => _filterType = TransactionType.transfer,
-                      ),
+                      onSelected: (_) =>
+                          setState(() => _filterType = TransactionType.transfer),
                     ),
                   ],
                 ),
@@ -113,33 +103,48 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
           ),
         ),
       ),
-      body: controller.status == TransactionStatus.loading
-          ? const LoadingIndicator(message: 'Carregando transações...')
-          : filtered.isEmpty
-              ? const _EmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 80, top: 8),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final transaction = filtered[index];
-                    return TransactionCard(
-                      transaction: transaction,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => TransactionDetailScreen(
-                            transaction: transaction,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+      body: asyncState.when(
+        loading: () => const LoadingIndicator(message: 'Carregando transações...'),
+        error: (e, _) => Center(child: Text('Erro: $e')),
+        data: (uiState) {
+          final searched = ref.watch(filteredTransactionsProvider);
+          final filtered = _filterType == null
+              ? searched
+              : searched.where((t) => t.type == _filterType).toList();
+
+          if (filtered.isEmpty) return const _EmptyState();
+
+          final itemCount = filtered.length + (uiState.isLoadingMore ? 1 : 0);
+          return ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.only(bottom: 80, top: 8),
+            itemCount: itemCount,
+            itemBuilder: (context, index) {
+              if (index >= filtered.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final transaction = filtered[index];
+              return SizedBox(
+                height: 72,
+                child: TransactionCard(
+                  transaction: transaction,
+                  onTap: () => context.push(
+                    '/transactions/${transaction.id}',
+                    extra: transaction,
+                  ),
                 ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
 
-/// `FilterChip` configurado com a aparência usada pela tela.
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -162,7 +167,6 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-/// Estado vazio exibido quando o filtro não retorna resultados.
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 

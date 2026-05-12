@@ -1,44 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/loading_indicator.dart';
-import '../../../auth/presentation/controllers/auth_controller.dart';
-import '../../../profile/presentation/controllers/theme_controller.dart';
+import '../../../auth/presentation/controllers/auth_notifier.dart';
+import '../../../profile/presentation/controllers/theme_notifier.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
-import '../controllers/transaction_controller.dart';
+import '../controllers/transaction_notifier.dart';
 import '../widgets/transaction_card.dart';
-import 'transaction_detail_screen.dart';
-import 'transaction_form_screen.dart';
 import 'transaction_list_screen.dart';
 
-/// Tela principal exibida após o login.
-///
-/// Hospeda uma `BottomNavigationBar` com três abas (início, transações,
-/// perfil) e dispara a assinatura ao stream de transações tão logo o
-/// usuário autenticado é conhecido.
-class DashboardScreen extends StatefulWidget {
-  /// Cria a [DashboardScreen].
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   int _selectedIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userId = context.read<AuthController>().user?.id;
-      if (userId != null) {
-        context.read<TransactionController>().setUserId(userId);
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,10 +56,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const TransactionFormScreen()),
-        ),
+        onPressed: () => context.push('/transactions/new'),
         icon: const Icon(Icons.add),
         label: const Text('Nova transação'),
       ),
@@ -85,16 +64,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-/// Aba inicial da [DashboardScreen]: cartão de saldo, últimas
-/// transações e atalho de alternância de tema.
-class _HomeTab extends StatelessWidget {
+class _HomeTab extends ConsumerWidget {
   const _HomeTab();
 
   @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthController>().user;
-    final controller = context.watch<TransactionController>();
-    final themeController = context.watch<ThemeController>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authStateStreamProvider).valueOrNull;
+    final txAsync = ref.watch(transactionNotifierProvider);
+    final themeMode =
+        ref.watch(themeNotifierProvider).valueOrNull ?? ThemeMode.system;
+    final isDarkMode = themeMode == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -102,91 +81,79 @@ class _HomeTab extends StatelessWidget {
         actions: [
           IconButton(
             icon: Icon(
-              themeController.isDarkMode
+              isDarkMode
                   ? Icons.light_mode_outlined
                   : Icons.dark_mode_outlined,
             ),
-            onPressed: themeController.toggleTheme,
+            onPressed: () => ref
+                .read(themeNotifierProvider.notifier)
+                .setTheme(isDarkMode ? ThemeMode.light : ThemeMode.dark),
           ),
         ],
       ),
-      body: controller.status == TransactionStatus.loading
-          ? const LoadingIndicator(message: 'Carregando...')
-          : RefreshIndicator(
-              onRefresh: () async {
-                final userId = context.read<AuthController>().user?.id;
-                if (userId != null) {
-                  context.read<TransactionController>().setUserId(userId);
-                }
-              },
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _BalanceCard(
-                      balance: controller.balance,
-                      income: controller.totalIncome,
-                      expenses: controller.totalExpenses,
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Últimas transações',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text('Ver todas'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (controller.transactions.isEmpty)
-                      const _EmptyTransactions()
-                    else
-                      ...controller.transactions.take(5).map(
-                            (t) => TransactionCard(
-                              transaction: t,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      TransactionDetailScreen(
-                                    transaction: t,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                    const SizedBox(height: 80),
-                  ],
+      body: txAsync.when(
+        loading: () => const LoadingIndicator(message: 'Carregando...'),
+        error: (e, _) => Center(child: Text('Erro: $e')),
+        data: (uiState) => RefreshIndicator(
+          onRefresh: () async =>
+              ref.invalidate(transactionNotifierProvider),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RepaintBoundary(
+                  child: _BalanceCard(
+                    balance: uiState.balance,
+                    income: uiState.totalIncome,
+                    expenses: uiState.totalExpense,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Últimas transações',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      TextButton(
+                        onPressed: () {},
+                        child: const Text('Ver todas'),
+                      ),
+                    ],
+                  ),
+                ),
+                if (uiState.transactions.isEmpty)
+                  const _EmptyTransactions()
+                else
+                  ...uiState.transactions.take(5).map(
+                        (t) => TransactionCard(
+                          transaction: t,
+                          onTap: () => context.push(
+                            '/transactions/${t.id}',
+                            extra: t,
+                          ),
+                        ),
+                      ),
+                const SizedBox(height: 80),
+              ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-/// Cartão com o saldo principal e os totais de receita/despesa.
 class _BalanceCard extends StatelessWidget {
-  /// Saldo do usuário.
   final double balance;
-
-  /// Total de receitas computadas.
   final double income;
-
-  /// Total de despesas computadas.
   final double expenses;
 
   const _BalanceCard({
@@ -259,8 +226,6 @@ class _BalanceCard extends StatelessWidget {
   }
 }
 
-/// Item de resumo (rótulo + valor + ícone) usado dentro do
-/// [_BalanceCard].
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;
@@ -292,8 +257,7 @@ class _StatItem extends StatelessWidget {
           children: [
             Text(
               label,
-              style:
-                  const TextStyle(color: Colors.white70, fontSize: 11),
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
             Text(
               value,
@@ -310,7 +274,6 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-/// Estado vazio exibido quando o usuário ainda não possui transações.
 class _EmptyTransactions extends StatelessWidget {
   const _EmptyTransactions();
 
