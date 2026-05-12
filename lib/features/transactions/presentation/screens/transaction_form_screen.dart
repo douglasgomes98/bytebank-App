@@ -99,6 +99,7 @@ class _TransactionFormScreenState
               ? null
               : _notesController.text.trim(),
         ),
+        newReceiptFile: _receiptFile,
       );
     } else {
       await notifier.createTransaction(
@@ -115,6 +116,7 @@ class _TransactionFormScreenState
               : _notesController.text.trim(),
           createdAt: DateTime.now(),
         ),
+        receiptFile: _receiptFile,
       );
     }
 

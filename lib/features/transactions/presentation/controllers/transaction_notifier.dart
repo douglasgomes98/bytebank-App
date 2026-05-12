@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:bytebank_app/core/utils/constants.dart';
@@ -143,18 +144,28 @@ class TransactionNotifier extends _$TransactionNotifier {
     }
   }
 
-  Future<void> createTransaction(TransactionEntity transaction) async {
+  Future<void> createTransaction(
+    TransactionEntity transaction, {
+    File? receiptFile,
+  }) async {
     final userId = ref.read(authStateStreamProvider).valueOrNull?.id;
     if (userId == null) return;
     await ref.read(ensureFreshSessionProvider).call();
-    await ref
-        .read(createTransactionProvider)
-        .call(transaction: transaction.copyWith(userId: userId));
+    await ref.read(createTransactionProvider).call(
+          transaction: transaction.copyWith(userId: userId),
+          receiptFile: receiptFile,
+        );
   }
 
-  Future<void> updateTransaction(TransactionEntity transaction) async {
+  Future<void> updateTransaction(
+    TransactionEntity transaction, {
+    File? newReceiptFile,
+  }) async {
     await ref.read(ensureFreshSessionProvider).call();
-    await ref.read(updateTransactionProvider).call(transaction: transaction);
+    await ref.read(updateTransactionProvider).call(
+          transaction: transaction,
+          newReceiptFile: newReceiptFile,
+        );
   }
 
   Future<void> deleteTransaction(String transactionId) async {

@@ -127,14 +127,11 @@ class _TransactionListScreenState
                 );
               }
               final transaction = filtered[index];
-              return SizedBox(
-                height: 72,
-                child: TransactionCard(
-                  transaction: transaction,
-                  onTap: () => context.push(
-                    '/transactions/${transaction.id}',
-                    extra: transaction,
-                  ),
+              return TransactionCard(
+                transaction: transaction,
+                onTap: () => context.push(
+                  '/transactions/${transaction.id}',
+                  extra: transaction,
                 ),
               );
             },
