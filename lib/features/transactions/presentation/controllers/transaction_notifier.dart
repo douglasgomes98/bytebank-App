@@ -39,6 +39,33 @@ class TransactionNotifier extends _$TransactionNotifier {
   }
 
   Future<void> fetchNextPage() async {
-    // Pagination implemented in Task 9
+    final current = state.valueOrNull;
+    if (current == null || !current.hasMore) return;
+
+    final userId = ref.read(authStateStreamProvider).valueOrNull?.id;
+    if (userId == null) return;
+
+    final lastId =
+        current.transactions.isNotEmpty ? current.transactions.last.id : null;
+
+    final result = await ref.read(fetchNextPageProvider).call(
+          userId: userId,
+          lastTransactionId: lastId,
+        );
+
+    result.fold(
+      (_) {},
+      (newItems) {
+        if (newItems.isEmpty) {
+          state = AsyncData(current.copyWith(hasMore: false));
+          return;
+        }
+        final merged = [...current.transactions, ...newItems];
+        state = AsyncData(current.copyWith(
+          transactions: merged,
+          hasMore: newItems.length >= 20,
+        ));
+      },
+    );
   }
 }

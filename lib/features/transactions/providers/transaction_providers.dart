@@ -7,6 +7,7 @@ import 'package:bytebank_app/features/transactions/domain/repositories/transacti
 import 'package:bytebank_app/features/transactions/domain/usecases/create_transaction.dart';
 import 'package:bytebank_app/features/transactions/domain/usecases/delete_transaction.dart';
 import 'package:bytebank_app/features/transactions/domain/usecases/update_transaction.dart';
+import 'package:bytebank_app/features/transactions/domain/usecases/fetch_next_page.dart';
 import 'package:bytebank_app/features/transactions/domain/usecases/watch_transactions.dart';
 
 part 'transaction_providers.g.dart';
@@ -47,3 +48,7 @@ UpdateTransaction updateTransaction(UpdateTransactionRef ref) =>
 @Riverpod(keepAlive: true)
 DeleteTransaction deleteTransaction(DeleteTransactionRef ref) =>
     DeleteTransaction(ref.watch(transactionRepositoryProvider));
+
+@Riverpod(keepAlive: true)
+FetchNextPage fetchNextPage(FetchNextPageRef ref) =>
+    FetchNextPage(ref.watch(transactionRepositoryProvider));

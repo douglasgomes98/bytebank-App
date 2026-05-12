@@ -131,5 +131,22 @@ final deleteTransactionProvider = Provider<DeleteTransaction>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef DeleteTransactionRef = ProviderRef<DeleteTransaction>;
+String _$fetchNextPageHash() => r'9a54d2837ac0eee98355d09c3fca6007d5985cf1';
+
+/// See also [fetchNextPage].
+@ProviderFor(fetchNextPage)
+final fetchNextPageProvider = Provider<FetchNextPage>.internal(
+  fetchNextPage,
+  name: r'fetchNextPageProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$fetchNextPageHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef FetchNextPageRef = ProviderRef<FetchNextPage>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

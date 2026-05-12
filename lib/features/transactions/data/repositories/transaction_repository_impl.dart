@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:fpdart/fpdart.dart';
 import 'package:uuid/uuid.dart';
 
@@ -37,6 +38,29 @@ class TransactionRepositoryImpl implements TransactionRepository {
         .handleError((e) => Left<Failure, List<TransactionEntity>>(
               ServerFailure(e.toString()),
             ));
+  }
+
+  @override
+  Future<Either<Failure, List<TransactionEntity>>> fetchNextPage({
+    required String userId,
+    required String? lastTransactionId,
+    int limit = 20,
+  }) async {
+    try {
+      DocumentSnapshot? startAfter;
+      if (lastTransactionId != null) {
+        startAfter =
+            await _firestoreDataSource.getDocumentSnapshot(lastTransactionId);
+      }
+      final dtos = await _firestoreDataSource.fetchPage(
+        userId,
+        limit: limit,
+        startAfter: startAfter,
+      );
+      return Right(dtos.map((dto) => dto.toEntity()).toList(growable: false));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message, code: e.code));
+    }
   }
 
   @override

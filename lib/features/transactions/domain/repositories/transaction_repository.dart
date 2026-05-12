@@ -10,6 +10,12 @@ abstract class TransactionRepository {
     String userId,
   );
 
+  Future<Either<Failure, List<TransactionEntity>>> fetchNextPage({
+    required String userId,
+    required String? lastTransactionId,
+    int limit = 20,
+  });
+
   Future<Either<Failure, Unit>> createTransaction({
     required TransactionEntity transaction,
     File? receiptFile,
