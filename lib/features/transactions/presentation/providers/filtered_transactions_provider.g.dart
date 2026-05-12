@@ -6,13 +6,31 @@ part of 'filtered_transactions_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
+String _$debouncedSearchQueryHash() =>
+    r'919c8b2e0e0666f3b5ebbca9ed31c2881e71ab5b';
+
+/// See also [debouncedSearchQuery].
+@ProviderFor(debouncedSearchQuery)
+final debouncedSearchQueryProvider = AutoDisposeStreamProvider<String>.internal(
+  debouncedSearchQuery,
+  name: r'debouncedSearchQueryProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$debouncedSearchQueryHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef DebouncedSearchQueryRef = AutoDisposeStreamProviderRef<String>;
 String _$filteredTransactionsHash() =>
-    r'5658a1c360afb410868d8d13ee3aaa60a6ddebce';
+    r'3e17cd098f5814fd994f67d7bf9d41ab23af8d02';
 
 /// See also [filteredTransactions].
 @ProviderFor(filteredTransactions)
 final filteredTransactionsProvider =
-    AutoDisposeStreamProvider<TransactionUiState>.internal(
+    AutoDisposeProvider<List<TransactionEntity>>.internal(
       filteredTransactions,
       name: r'filteredTransactionsProvider',
       debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -25,9 +43,9 @@ final filteredTransactionsProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef FilteredTransactionsRef =
-    AutoDisposeStreamProviderRef<TransactionUiState>;
+    AutoDisposeProviderRef<List<TransactionEntity>>;
 String _$transactionSearchQueryHash() =>
-    r'83776225972e0f1b8a02a9382858ff5a32aaea20';
+    r'50d44c9bbc111da4f6535358d9d4e9f3abdc5a06';
 
 /// See also [TransactionSearchQuery].
 @ProviderFor(TransactionSearchQuery)

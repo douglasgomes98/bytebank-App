@@ -32,7 +32,7 @@ void main() {
   });
 
   test('emits Right<List<TransactionEntity>> from stream', () async {
-    when(() => mockRepo.watchTransactions('user1'))
+    when(() => mockRepo.watchTransactions('user1', limit: any(named: 'limit')))
         .thenAnswer((_) => Stream.value(Right(tTransactions)));
 
     final stream = useCase('user1');
@@ -40,5 +40,14 @@ void main() {
 
     expect(result.isRight(), true);
     expect(result.getOrElse((_) => []).length, 1);
+  });
+
+  test('forwards limit parameter to repository', () async {
+    when(() => mockRepo.watchTransactions('user1', limit: 50))
+        .thenAnswer((_) => Stream.value(Right(tTransactions)));
+
+    useCase('user1', limit: 50);
+
+    verify(() => mockRepo.watchTransactions('user1', limit: 50)).called(1);
   });
 }

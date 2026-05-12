@@ -19,7 +19,7 @@ class FirestoreTransactionDataSource {
 
   Stream<List<TransactionDto>> watchTransactions(
     String userId, {
-    int limit = 20,
+    int limit = AppConstants.transactionsPageSize,
   }) {
     return _db
         .collection(AppConstants.transactionsCollection)
@@ -33,21 +33,20 @@ class FirestoreTransactionDataSource {
 
   Future<List<TransactionDto>> fetchPage(
     String userId, {
-    int limit = 20,
+    int limit = AppConstants.transactionsPageSize,
     DocumentSnapshot? startAfter,
   }) async {
     try {
-      var query = _db
+      Query<Map<String, dynamic>> query = _db
           .collection(AppConstants.transactionsCollection)
           .where('userId', isEqualTo: userId)
-          .orderBy('date', descending: true)
-          .limit(limit);
+          .orderBy('date', descending: true);
 
       if (startAfter != null) {
         query = query.startAfterDocument(startAfter);
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query.limit(limit).get();
       return snapshot.docs.map(TransactionDto.fromFirestore).toList();
     } on FirebaseException catch (e) {
       throw ServerException(e.message ?? 'Erro ao buscar transações', code: e.code);

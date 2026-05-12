@@ -107,26 +107,34 @@ class _TransactionListScreenState
         loading: () => const LoadingIndicator(message: 'Carregando transações...'),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (uiState) {
+          final searched = ref.watch(filteredTransactionsProvider);
           final filtered = _filterType == null
-              ? uiState.transactions
-              : uiState.transactions
-                  .where((t) => t.type == _filterType)
-                  .toList();
+              ? searched
+              : searched.where((t) => t.type == _filterType).toList();
 
           if (filtered.isEmpty) return const _EmptyState();
 
+          final itemCount = filtered.length + (uiState.isLoadingMore ? 1 : 0);
           return ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.only(bottom: 80, top: 8),
-            itemExtent: 72.0,
-            itemCount: filtered.length,
+            itemCount: itemCount,
             itemBuilder: (context, index) {
+              if (index >= filtered.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
               final transaction = filtered[index];
-              return TransactionCard(
-                transaction: transaction,
-                onTap: () => context.push(
-                  '/transactions/${transaction.id}',
-                  extra: transaction,
+              return SizedBox(
+                height: 72,
+                child: TransactionCard(
+                  transaction: transaction,
+                  onTap: () => context.push(
+                    '/transactions/${transaction.id}',
+                    extra: transaction,
+                  ),
                 ),
               );
             },

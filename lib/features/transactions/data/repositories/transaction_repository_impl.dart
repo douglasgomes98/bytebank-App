@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/utils/constants.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../datasources/firebase_storage_data_source.dart';
@@ -27,10 +28,11 @@ class TransactionRepositoryImpl implements TransactionRepository {
 
   @override
   Stream<Either<Failure, List<TransactionEntity>>> watchTransactions(
-    String userId,
-  ) {
+    String userId, {
+    int limit = AppConstants.transactionsPageSize,
+  }) {
     return _firestoreDataSource
-        .watchTransactions(userId)
+        .watchTransactions(userId, limit: limit)
         .map<Either<Failure, List<TransactionEntity>>>(
           (list) =>
               Right(list.map((dto) => dto.toEntity()).toList(growable: false)),
@@ -44,7 +46,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
   Future<Either<Failure, List<TransactionEntity>>> fetchNextPage({
     required String userId,
     required String? lastTransactionId,
-    int limit = 20,
+    int limit = AppConstants.transactionsPageSize,
   }) async {
     try {
       DocumentSnapshot? startAfter;

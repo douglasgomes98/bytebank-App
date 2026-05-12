@@ -5,18 +5,52 @@ import 'package:bytebank_app/core/security/session_lock_notifier.dart';
 import 'package:bytebank_app/core/theme/app_theme.dart';
 import 'package:bytebank_app/features/profile/presentation/controllers/theme_notifier.dart';
 
-class ByteBankApp extends ConsumerWidget {
+class ByteBankApp extends ConsumerStatefulWidget {
   const ByteBankApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ByteBankApp> createState() => _ByteBankAppState();
+}
+
+class _ByteBankAppState extends ConsumerState<ByteBankApp>
+    with WidgetsBindingObserver {
+  bool _logoPrecached = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_logoPrecached) {
+      precacheImage(const AssetImage('assets/images/logo.png'), context);
+      _logoPrecached = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      ref.read(sessionLockNotifierProvider.notifier).lock();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode =
         ref.watch(themeNotifierProvider).valueOrNull ?? ThemeMode.system;
     final isLocked = ref.watch(sessionLockNotifierProvider);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      precacheImage(const AssetImage('assets/images/logo.png'), context);
-    });
 
     if (isLocked) {
       return MaterialApp(
@@ -24,7 +58,7 @@ class ByteBankApp extends ConsumerWidget {
         darkTheme: AppTheme.dark,
         themeMode: themeMode,
         debugShowCheckedModeBanner: false,
-        home: _BiometricLockScreen(),
+        home: const _BiometricLockScreen(),
       );
     }
 
@@ -39,6 +73,8 @@ class ByteBankApp extends ConsumerWidget {
 }
 
 class _BiometricLockScreen extends ConsumerWidget {
+  const _BiometricLockScreen();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
