@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:bytebank_app/core/router/app_router.dart';
 import 'package:bytebank_app/core/security/session_lock_notifier.dart';
 import 'package:bytebank_app/core/theme/app_theme.dart';
+import 'package:bytebank_app/features/auth/presentation/controllers/auth_notifier.dart';
 import 'package:bytebank_app/features/profile/presentation/controllers/theme_notifier.dart';
 
 class ByteBankApp extends ConsumerStatefulWidget {
@@ -102,6 +103,17 @@ class _BiometricLockScreen extends ConsumerWidget {
                       ref.read(sessionLockNotifierProvider.notifier).unlock(),
                   icon: const Icon(Icons.lock_open),
                   label: const Text('Desbloquear'),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () async {
+                    await ref
+                        .read(authNotifierProvider.notifier)
+                        .signOut();
+                    ref.read(sessionLockNotifierProvider.notifier).forceUnlock();
+                  },
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sair'),
                 ),
               ],
             ),

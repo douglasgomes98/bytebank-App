@@ -18,4 +18,6 @@ class SessionLockNotifier extends _$SessionLockNotifier {
     );
     if (result == BiometricAuthResult.success) state = false;
   }
+
+  void forceUnlock() => state = false;
 }

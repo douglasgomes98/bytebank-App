@@ -9,6 +9,8 @@ part 'filtered_transactions_provider.g.dart';
 @riverpod
 class TransactionSearchQuery extends _$TransactionSearchQuery {
   final _subject = BehaviorSubject<String>();
+  late final Stream<String> _debounced =
+      _subject.stream.debounceTime(const Duration(milliseconds: 300));
 
   @override
   String build() {
@@ -21,8 +23,7 @@ class TransactionSearchQuery extends _$TransactionSearchQuery {
     _subject.add(query);
   }
 
-  Stream<String> get debouncedStream =>
-      _subject.stream.debounceTime(const Duration(milliseconds: 300));
+  Stream<String> get debouncedStream => _debounced;
 }
 
 @riverpod
