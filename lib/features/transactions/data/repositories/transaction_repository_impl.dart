@@ -28,12 +28,15 @@ class TransactionRepositoryImpl implements TransactionRepository {
   Stream<Either<Failure, List<TransactionEntity>>> watchTransactions(
     String userId,
   ) {
-    return _firestoreDataSource.watchTransactions(userId).map(
+    return _firestoreDataSource
+        .watchTransactions(userId)
+        .map<Either<Failure, List<TransactionEntity>>>(
           (list) =>
               Right(list.map((dto) => dto.toEntity()).toList(growable: false)),
-        ).handleError(
-          (e) => Left(ServerFailure(e.toString())),
-        );
+        )
+        .handleError((e) => Left<Failure, List<TransactionEntity>>(
+              ServerFailure(e.toString()),
+            ));
   }
 
   @override

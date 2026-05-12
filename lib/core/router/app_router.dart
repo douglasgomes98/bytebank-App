@@ -1,31 +1,64 @@
-/// Configuração centralizada de rotas da aplicação.
-///
-/// Reservado, conforme o item 8 da proposta arquitetural, para a futura
-/// adoção de `go_router`. Enquanto o roteamento permanecer imperativo
-/// (via `Navigator.push`), este arquivo expõe apenas as constantes de nome
-/// de rota usadas pela camada de apresentação.
-library;
+import 'package:go_router/go_router.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:bytebank_app/features/transactions/domain/entities/transaction_entity.dart';
+import 'package:bytebank_app/core/router/go_router_refresh_notifier.dart';
+import 'package:bytebank_app/features/auth/presentation/controllers/auth_notifier.dart';
+import 'package:bytebank_app/features/auth/presentation/screens/login_screen.dart';
+import 'package:bytebank_app/features/auth/presentation/screens/register_screen.dart';
+import 'package:bytebank_app/features/transactions/presentation/screens/dashboard_screen.dart';
+import 'package:bytebank_app/features/transactions/presentation/screens/transaction_detail_screen.dart';
+import 'package:bytebank_app/features/transactions/presentation/screens/transaction_form_screen.dart';
+import 'package:bytebank_app/features/transactions/presentation/screens/transaction_list_screen.dart';
+import 'package:bytebank_app/features/profile/presentation/screens/profile_screen.dart';
 
-/// Nomes simbólicos das rotas conhecidas pela aplicação.
-class AppRoutes {
-  /// Tela inicial após login (dashboard com saldo e últimas transações).
-  static const String dashboard = '/dashboard';
+part 'app_router.g.dart';
 
-  /// Tela de login.
-  static const String login = '/login';
+@Riverpod(keepAlive: true)
+GoRouter appRouter(AppRouterRef ref) {
+  final notifier = GoRouterRefreshNotifier(
+    ref.watch(authStateStreamProvider.stream),
+  );
+  ref.onDispose(notifier.dispose);
 
-  /// Tela de cadastro.
-  static const String register = '/register';
-
-  /// Tela com a listagem completa de transações.
-  static const String transactions = '/transactions';
-
-  /// Tela de criação/edição de transação.
-  static const String transactionForm = '/transactions/form';
-
-  /// Tela de detalhe de uma transação.
-  static const String transactionDetail = '/transactions/detail';
-
-  /// Tela de perfil do usuário.
-  static const String profile = '/profile';
+  return GoRouter(
+    initialLocation: '/login',
+    refreshListenable: notifier,
+    redirect: (context, state) {
+      final authAsync = ref.read(authNotifierProvider);
+      return authAsync.when(
+        loading: () => null,
+        error: (_, __) => '/login',
+        data: (user) {
+          final isLoggedIn = user != null;
+          final isOnAuthRoute = state.matchedLocation == '/login' ||
+              state.matchedLocation == '/register';
+          if (!isLoggedIn && !isOnAuthRoute) return '/login';
+          if (isLoggedIn && isOnAuthRoute) return '/dashboard';
+          return null;
+        },
+      );
+    },
+    routes: [
+      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+      GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
+      GoRoute(
+        path: '/transactions',
+        builder: (_, __) => const TransactionListScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (_, __) => const TransactionFormScreen(),
+          ),
+          GoRoute(
+            path: ':id',
+            builder: (_, state) => TransactionDetailScreen(
+              transaction: state.extra as TransactionEntity,
+            ),
+          ),
+        ],
+      ),
+      GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+    ],
+  );
 }

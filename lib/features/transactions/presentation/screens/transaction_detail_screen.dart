@@ -1,26 +1,20 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../domain/entities/transaction_category.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../domain/entities/transaction_type.dart';
-import '../controllers/transaction_controller.dart';
-import 'transaction_form_screen.dart';
+import '../controllers/transaction_notifier.dart';
 
-/// Tela com o detalhe de uma [TransactionEntity], incluindo edição e
-/// exclusão.
-class TransactionDetailScreen extends StatelessWidget {
-  /// Transação exibida.
+class TransactionDetailScreen extends ConsumerWidget {
   final TransactionEntity transaction;
 
-  /// Cria a [TransactionDetailScreen].
   const TransactionDetailScreen({super.key, required this.transaction});
 
-  /// Cor associada ao tipo da transação, usada para destacar valor e
-  /// ícone.
   Color get _typeColor {
     switch (transaction.type) {
       case TransactionType.income:
@@ -33,24 +27,21 @@ class TransactionDetailScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detalhe'),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    TransactionFormScreen(transaction: transaction),
-              ),
+            onPressed: () => context.push(
+              '/transactions/new',
+              extra: transaction,
             ),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outlined),
-            onPressed: () => _confirmDelete(context),
+            onPressed: () => _confirmDelete(context, ref),
           ),
         ],
       ),
@@ -153,9 +144,7 @@ class TransactionDetailScreen extends StatelessWidget {
                   placeholder: (ctx, url) => Container(
                     height: 200,
                     color: Colors.grey[200],
-                    child: const Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    child: const Center(child: CircularProgressIndicator()),
                   ),
                   errorWidget: (ctx, url, err) => Container(
                     height: 200,
@@ -171,15 +160,12 @@ class TransactionDetailScreen extends StatelessWidget {
     );
   }
 
-  /// Apresenta o diálogo de confirmação de exclusão e dispara o caso
-  /// de uso correspondente quando confirmado.
-  void _confirmDelete(BuildContext context) {
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir transação'),
-        content:
-            const Text('Tem certeza que deseja excluir esta transação?'),
+        content: const Text('Tem certeza que deseja excluir esta transação?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -191,12 +177,12 @@ class TransactionDetailScreen extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
-              await context
-                  .read<TransactionController>()
-                  .deleteTransactionEntry(transaction);
+              await ref
+                  .read(transactionNotifierProvider.notifier)
+                  .deleteTransaction(transaction.id);
               if (ctx.mounted) {
                 Navigator.pop(ctx);
-                Navigator.pop(context);
+                context.pop();
               }
             },
             child: const Text('Excluir'),
@@ -207,8 +193,6 @@ class TransactionDetailScreen extends StatelessWidget {
   }
 }
 
-/// Linha auxiliar com rótulo à esquerda e valor à direita usada na
-/// composição da seção de detalhes.
 class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
@@ -243,8 +227,7 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontWeight:
-                    valueBold ? FontWeight.bold : FontWeight.normal,
+                fontWeight: valueBold ? FontWeight.bold : FontWeight.normal,
                 color: valueColor,
                 fontSize: 14,
               ),

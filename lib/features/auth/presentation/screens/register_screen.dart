@@ -1,24 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/custom_button.dart';
-import '../controllers/auth_controller.dart';
+import '../controllers/auth_notifier.dart';
 
-/// Tela de cadastro de novos usuários.
-///
-/// Replica o fluxo da versão anterior: ao concluir o cadastro com
-/// sucesso, exibe uma confirmação e retorna para a tela de login para
-/// que o usuário autentique-se manualmente.
-class RegisterScreen extends StatefulWidget {
-  /// Cria a [RegisterScreen].
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -36,42 +31,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  /// Valida o formulário e dispara o caso de uso de cadastro via
-  /// [AuthController.signUp].
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final auth = context.read<AuthController>();
-    final success = await auth.signUp(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    await ref.read(authNotifierProvider.notifier).signUp(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
     if (!mounted) return;
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Conta criada com sucesso!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pop(context);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+    final authState = ref.read(authNotifierProvider);
+    authState.whenOrNull(
+      error: (e, _) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(auth.errorMessage ?? 'Erro ao cadastrar'),
+          content: Text(e.toString()),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
-      );
-    }
+      ),
+      data: (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Conta criada com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/login');
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLoading =
-        context.watch<AuthController>().status == AuthStatus.loading;
+    final isLoading = ref.watch(authNotifierProvider).isLoading;
 
     return Scaffold(
       appBar: AppBar(
@@ -183,7 +175,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     const Text('Já tem uma conta?'),
                     TextButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => context.pop(),
                       child: const Text('Entrar'),
                     ),
                   ],
